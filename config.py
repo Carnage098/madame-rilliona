@@ -47,4 +47,3 @@ class Settings:
             card_image_directory=image_directory,
             log_level=os.getenv("LOG_LEVEL", "INFO"),
         )
-
