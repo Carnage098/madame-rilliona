@@ -66,6 +66,102 @@ CREATE INDEX IF NOT EXISTS idx_cards_archetype_en
 
 CREATE INDEX IF NOT EXISTS idx_cards_last_synced
     ON cards (last_synced_at DESC);
+
+
+CREATE TABLE IF NOT EXISTS archetypes (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(160) NOT NULL,
+    normalized_name VARCHAR(160) NOT NULL UNIQUE,
+    description TEXT,
+    playstyle VARCHAR(160),
+    difficulty VARCHAR(40),
+    created_by BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_archetypes_name
+    ON archetypes (normalized_name);
+
+
+CREATE TABLE IF NOT EXISTS combos (
+    id BIGSERIAL PRIMARY KEY,
+    archetype_id BIGINT NOT NULL
+        REFERENCES archetypes(id)
+        ON DELETE CASCADE,
+
+    name VARCHAR(180) NOT NULL,
+    normalized_name VARCHAR(180) NOT NULL,
+    description TEXT NOT NULL,
+
+    combo_type VARCHAR(50) NOT NULL,
+    game_format VARCHAR(40) NOT NULL,
+    banlist VARCHAR(120),
+    difficulty VARCHAR(40) NOT NULL,
+
+    starter_text TEXT NOT NULL,
+    requirements TEXT,
+    endboard TEXT NOT NULL,
+    interruptions TEXT,
+    follow_up TEXT,
+
+    weaknesses TEXT,
+    choke_points TEXT,
+    recovery TEXT,
+
+    video_url TEXT,
+    author_id BIGINT NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'verified',
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE (archetype_id, normalized_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_combos_archetype
+    ON combos (archetype_id);
+
+CREATE INDEX IF NOT EXISTS idx_combos_name
+    ON combos (normalized_name);
+
+CREATE INDEX IF NOT EXISTS idx_combos_status
+    ON combos (status);
+
+
+CREATE TABLE IF NOT EXISTS combo_steps (
+    id BIGSERIAL PRIMARY KEY,
+    combo_id BIGINT NOT NULL
+        REFERENCES combos(id)
+        ON DELETE CASCADE,
+    step_number INTEGER NOT NULL CHECK (step_number > 0),
+    instruction TEXT NOT NULL,
+    UNIQUE (combo_id, step_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_combo_steps_combo
+    ON combo_steps (combo_id, step_number);
+
+
+CREATE TABLE IF NOT EXISTS combo_cards (
+    id BIGSERIAL PRIMARY KEY,
+    combo_id BIGINT NOT NULL
+        REFERENCES combos(id)
+        ON DELETE CASCADE,
+    card_id BIGINT NOT NULL
+        REFERENCES cards(ygoprodeck_id)
+        ON DELETE RESTRICT,
+    role VARCHAR(40) NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity BETWEEN 1 AND 3),
+    notes TEXT,
+    UNIQUE (combo_id, card_id, role)
+);
+
+CREATE INDEX IF NOT EXISTS idx_combo_cards_combo
+    ON combo_cards (combo_id);
+
+CREATE INDEX IF NOT EXISTS idx_combo_cards_card
+    ON combo_cards (card_id);
 """
 
 
@@ -102,7 +198,6 @@ class Database:
     async def _initialize_connection(
         connection: asyncpg.Connection,
     ) -> None:
-        # asyncpg renvoie autrement JSON/JSONB sous forme de chaînes.
         for pg_type in ("json", "jsonb"):
             await connection.set_type_codec(
                 pg_type,
