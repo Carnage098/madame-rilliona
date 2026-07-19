@@ -300,4 +300,3 @@ class CardRepository:
             raw_data_en=dict(row["raw_data_en"] or {}),
             raw_data_fr=dict(row["raw_data_fr"] or {}),
         )
-
