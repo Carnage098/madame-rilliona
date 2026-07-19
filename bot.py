@@ -7,7 +7,7 @@ import discord
 from discord.ext import commands
 
 from config import Settings
-from database import Database
+from db_connection import Database
 from repositories.archetype_repository import ArchetypeRepository
 from repositories.card_repository import CardRepository
 from repositories.combo_repository import ComboRepository
