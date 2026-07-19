@@ -8,15 +8,20 @@ from discord.ext import commands
 
 from config import Settings
 from database import Database
+from repositories.archetype_repository import ArchetypeRepository
 from repositories.card_repository import CardRepository
+from repositories.combo_repository import ComboRepository
 from services.card_api_service import CardApiService
 from services.card_catalog_service import CardCatalogService
 from services.card_image_service import CardImageService
+from services.combo_service import ComboService
 
 
 COGS = (
     "cogs.cards",
     "cogs.card_admin",
+    "cogs.archetypes",
+    "cogs.combos",
 )
 
 
@@ -26,10 +31,15 @@ class MadameRillionaBot(commands.Bot):
     settings: Settings
     database: Database
     http_session: aiohttp.ClientSession
+
     card_repository: CardRepository
     card_api: CardApiService
     card_catalog: CardCatalogService
     card_images: CardImageService
+
+    archetype_repository: ArchetypeRepository
+    combo_repository: ComboRepository
+    combo_service: ComboService
 
     def __init__(self, settings: Settings) -> None:
         intents = discord.Intents.default()
@@ -51,8 +61,8 @@ class MadameRillionaBot(commands.Bot):
             timeout=timeout,
             headers={
                 "User-Agent": (
-                    "Madame-Rilliona-Discord-Bot/1.0 "
-                    "(Yu-Gi-Oh card catalogue; contact: bot owner)"
+                    "Madame-Rilliona-Discord-Bot/2.0 "
+                    "(Yu-Gi-Oh card and combo library)"
                 )
             },
         )
@@ -66,6 +76,13 @@ class MadameRillionaBot(commands.Bot):
         self.card_images = CardImageService(
             session=self.http_session,
             image_directory=self.settings.card_image_directory,
+        )
+
+        self.archetype_repository = ArchetypeRepository(self.database)
+        self.combo_repository = ComboRepository(self.database)
+        self.combo_service = ComboService(
+            archetypes=self.archetype_repository,
+            combos=self.combo_repository,
         )
 
         for extension in COGS:
