@@ -1,0 +1,35 @@
+INSTALLATION PROPRE — MADAME RILLIONA V2.7
+
+À la racine du dépôt GitHub :
+- bot.py
+- config.py
+- database_manager.py
+- requirements.txt
+- railway.toml
+- cogs/
+- models/
+- repositories/
+- services/
+- utils/
+
+Supprimer les anciens éléments incompatibles :
+- database.py
+- database/
+- start.py
+- flat_import_compat.py
+
+Railway :
+- Root Directory : vide
+- Start Command : python bot.py
+
+Variables obligatoires :
+- DISCORD_TOKEN
+- DATABASE_URL
+
+Variables recommandées :
+- GUILD_ID
+- CARD_IMAGE_DIRECTORY=/app/data/card_images
+- LOG_LEVEL=INFO
+- RANDOM_DISCOVERY_ENABLED=true
+- RANDOM_DISCOVERY_INTERVAL_MINUTES=360
+- RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS=300
