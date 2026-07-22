@@ -7,8 +7,10 @@ from discord import app_commands
 from discord.ext import commands
 
 from config import SETTINGS
+from models.card_submission import CardSubmission
 from utils.embeds import card_embed, error_embed, success_embed
 from utils.permissions import is_staff_member
+from views.card_submission_review import CardSubmissionReviewView, submission_embed
 
 
 LOGGER = logging.getLogger(__name__)
@@ -94,9 +96,39 @@ class CardAdminCog(
             embed.set_image(url=image_url)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+    async def _send_submission_review(
+        self,
+        interaction: discord.Interaction,
+        submission: CardSubmission,
+    ) -> None:
+        embed = submission_embed(submission)
+        view = CardSubmissionReviewView(
+            self.bot,
+            submission.id,
+            disabled=submission.status != "pending",
+        )
+        image_path = submission.pending_image_path
+        if image_path is not None and image_path.is_file():
+            filename = f"proposition_{submission.id}.png"
+            file = discord.File(image_path, filename=filename)
+            embed.set_image(url=f"attachment://{filename}")
+            await interaction.followup.send(
+                embed=embed,
+                view=view,
+                file=file,
+                ephemeral=True,
+            )
+            return
+        await interaction.followup.send(
+            embed=embed,
+            view=view,
+            ephemeral=True,
+        )
+
     @app_commands.command(name="statut", description="Afficher l'état du catalogue de cartes")
     async def catalogue_status(self, interaction: discord.Interaction) -> None:
         count = await self.bot.card_repository.count()
+        pending_submissions = await self.bot.card_submission_repository.count_pending()
         categories = await self.bot.card_repository.category_counts()
         category_lines = "\n".join(
             f"• **{name}** : {total}"
@@ -109,7 +141,8 @@ class CardAdminCog(
             else "désactivée"
         )
         description = (
-            f"**{count}** carte(s) enregistrée(s).\n\n"
+            f"**{count}** carte(s) enregistrée(s).\n"
+            f"**{pending_submissions}** proposition(s) en attente.\n\n"
             f"**Classement**\n{category_lines}\n\n"
             f"**Découverte aléatoire** : {discovery_status}.\n"
             "Toute carte trouvée par `/carte rechercher` est enregistrée automatiquement."
@@ -121,7 +154,7 @@ class CardAdminCog(
 
     @app_commands.command(
         name="ajouter_carte",
-        description="Ajouter une carte depuis un site internet ou une image PNG",
+        description="Ajouter immédiatement une carte (staff uniquement)",
     )
     @app_commands.describe(
         source="Choisir entre une URL et une image PNG",
@@ -269,6 +302,72 @@ class CardAdminCog(
             embed=embed,
             card=verification.card,
         )
+
+    @app_commands.command(
+        name="demandes",
+        description="Lister les propositions de cartes en attente",
+    )
+    async def pending_submissions(self, interaction: discord.Interaction) -> None:
+        if not await self._require_staff(interaction):
+            return
+        submissions = await self.bot.card_submission_repository.list_pending(limit=25)
+        if not submissions:
+            await interaction.response.send_message(
+                embed=success_embed(
+                    "File de validation vide",
+                    "Aucune proposition de carte n'est en attente.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        lines: list[str] = []
+        for submission in submissions:
+            duplicate_note = {
+                "exact_id": "⚠️ même ID",
+                "exact_name": "⚠️ même nom",
+                "similar": "🔎 nom proche",
+                "none": "✅ aucun doublon",
+            }.get(submission.duplicate_status, submission.duplicate_status)
+            lines.append(
+                f"• **#{submission.id}** — {submission.candidate.display_name} "
+                f"(`{submission.candidate.ygoprodeck_id}`) — {duplicate_note}"
+            )
+
+        embed = discord.Embed(
+            title="🗂️ Propositions en attente",
+            description="\n".join(lines),
+            colour=discord.Colour.orange(),
+        )
+        embed.set_footer(
+            text="Utilise /base examiner_demande avec le numéro de la demande."
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(
+        name="examiner_demande",
+        description="Ouvrir une proposition de carte et afficher les boutons du staff",
+    )
+    @app_commands.describe(demande="Numéro de la proposition")
+    async def examine_submission(
+        self,
+        interaction: discord.Interaction,
+        demande: app_commands.Range[int, 1],
+    ) -> None:
+        if not await self._require_staff(interaction):
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        submission = await self.bot.card_submission_repository.get(int(demande))
+        if submission is None:
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Demande introuvable",
+                    "Aucune proposition ne porte ce numéro.",
+                ),
+                ephemeral=True,
+            )
+            return
+        await self._send_submission_review(interaction, submission)
 
     @app_commands.command(
         name="synchroniser_cartes",

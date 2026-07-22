@@ -240,6 +240,58 @@ class CardCatalogService:
         ]
         return await self.repository.upsert_many(cards)
 
+    async def resolve_candidate(
+        self,
+        query: str,
+        *,
+        import_source: str = "submission",
+    ) -> Card | None:
+        """Construit une fiche complète sans l'insérer dans PostgreSQL."""
+        normalized = query.strip()
+        if not normalized:
+            return None
+
+        if normalized.isdigit():
+            card_id = int(normalized)
+            english, french = await asyncio.gather(
+                self.api.fetch_by_id(card_id),
+                self.api.fetch_by_id(card_id, language="fr"),
+            )
+            if english is not None:
+                return self._build_card(
+                    english,
+                    french,
+                    import_source=import_source,
+                )
+            return await self.repository.get_by_id(card_id)
+
+        french_matches, english_matches = await asyncio.gather(
+            self.api.search(normalized, language="fr"),
+            self.api.search(normalized),
+        )
+        french = self._best_match(normalized, french_matches)
+        english: dict[str, Any] | None = None
+
+        if french is not None and french.get("id") is not None:
+            english = await self.api.fetch_by_id(int(french["id"]))
+        if english is None:
+            english = self._best_match(normalized, english_matches)
+
+        if english is not None:
+            card_id = int(english["id"])
+            if french is None or int(french.get("id", -1)) != card_id:
+                french = await self.api.fetch_by_id(card_id, language="fr")
+            return self._build_card(
+                english,
+                french,
+                import_source=import_source,
+            )
+
+        local = await self.repository.search(normalized, limit=1)
+        if not local:
+            local = await self.repository.search_normalized(normalized, limit=1)
+        return local[0] if local else None
+
     async def find_or_fetch(self, query: str) -> Card | None:
         """Cherche localement puis interroge l'API et enregistre le résultat complet."""
         normalized = query.strip()

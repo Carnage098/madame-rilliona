@@ -83,6 +83,59 @@ CREATE INDEX IF NOT EXISTS idx_card_imports_submitted_by
 CREATE INDEX IF NOT EXISTS idx_card_imports_created_at
     ON card_imports (created_at DESC);
 
+CREATE TABLE IF NOT EXISTS card_submissions (
+    id BIGSERIAL PRIMARY KEY,
+    candidate_card_id BIGINT NOT NULL,
+    submitted_by BIGINT NOT NULL,
+    guild_id BIGINT,
+    source_type TEXT NOT NULL,
+    source_reference TEXT,
+    original_filename TEXT,
+    pending_image_path TEXT,
+    candidate_data JSONB NOT NULL,
+    duplicate_data JSONB NOT NULL DEFAULT '[]'::jsonb,
+    duplicate_status TEXT NOT NULL DEFAULT 'none',
+    status TEXT NOT NULL DEFAULT 'pending',
+    review_channel_id BIGINT,
+    review_message_id BIGINT,
+    reviewed_by BIGINT,
+    review_reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS candidate_card_id BIGINT;
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS guild_id BIGINT;
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS pending_image_path TEXT;
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS duplicate_data JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS duplicate_status TEXT NOT NULL DEFAULT 'none';
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS review_channel_id BIGINT;
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS review_message_id BIGINT;
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS reviewed_by BIGINT;
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS review_reason TEXT;
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+ALTER TABLE card_submissions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS idx_card_submissions_status_created
+    ON card_submissions (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_card_submissions_candidate_card
+    ON card_submissions (candidate_card_id);
+CREATE INDEX IF NOT EXISTS idx_card_submissions_submitted_by
+    ON card_submissions (submitted_by);
+CREATE INDEX IF NOT EXISTS idx_card_submissions_review_message
+    ON card_submissions (review_message_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_card_submissions_active_candidate
+    ON card_submissions (candidate_card_id)
+    WHERE status IN ('pending', 'processing');
+
+-- Une interruption pendant une validation ne doit pas bloquer définitivement la demande.
+UPDATE card_submissions
+SET status = 'pending',
+    reviewed_by = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE status = 'processing';
+
 CREATE TABLE IF NOT EXISTS archetypes (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,

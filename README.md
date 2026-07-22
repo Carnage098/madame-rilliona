@@ -1,108 +1,84 @@
-# Madame Rilliona V2.9 — import staff de cartes
+# Madame Rilliona V3.0 — validation staff et doublons
 
-Cette version ajoute un circuit contrôlé pour importer une carte depuis une URL ou une image PNG, puis vérifier immédiatement son enregistrement dans PostgreSQL.
+Cette version ajoute un vrai circuit de proposition publique : une carte proposée par un membre n'entre pas dans le catalogue avant la décision du staff.
 
-## Commandes ajoutées
+## Commandes
 
-### `/base ajouter_carte`
-
-Options :
-
-- `source` : **Site internet** ou **Image PNG** ;
-- `nom` : nom français, nom anglais ou identifiant YGOPRODeck ;
-- `url` : page de référence pour le mode site ;
-- `image` : pièce jointe `.png` pour le mode image.
-
-Fonctionnement :
-
-1. le bot vérifie que l'utilisateur appartient au staff ;
-2. il identifie la carte ;
-3. il récupère ses données françaises et anglaises depuis YGOPRODeck ;
-4. il enregistre l'effet, le classement, les statistiques, l'archétype et les images ;
-5. il relit la fiche depuis PostgreSQL ;
-6. il affiche un contrôle détaillé ;
-7. il journalise l'import dans la table `card_imports`.
-
-### `/base verifier_carte`
-
-Cette commande ne consulte pas le site externe. Elle vérifie directement la base locale :
-
-- présence dans PostgreSQL ;
-- nom ;
-- effet ou description ;
-- classement ;
-- image disponible.
-
-## Sources URL
-
-- Une URL YGOPRODeck peut être utilisée seule lorsqu'elle contient un nom ou un identifiant exploitable.
-- Pour un autre site, renseigne également l'option `nom`. Madame Rilliona conserve l'URL comme référence mais utilise YGOPRODeck pour obtenir une fiche structurée et cohérente.
-- Le bot ne télécharge pas les pages des sites tiers, ce qui évite les accès réseau non sûrs et les extracteurs fragiles.
-
-## Images PNG
-
-- Taille maximale par défaut : 10 Mo.
-- Le fichier est contrôlé grâce à sa signature PNG et à son en-tête de dimensions.
-- L'option `nom` est recommandée. Elle est requise si le fichier porte un nom générique comme `image.png`.
-- Le PNG du staff est enregistré dans `CARD_IMAGE_DIRECTORY` et devient prioritaire sur l'image YGOPRODeck.
-
-## Vérification du staff
-
-Un membre est accepté s'il possède au moins l'un des éléments suivants :
-
-- Administrateur ;
-- Gérer le serveur ;
-- Gérer les messages ;
-- un rôle configuré dans `STAFF_ROLE_IDS`.
-
-Exemple Railway :
-
-```env
-STAFF_ROLE_IDS=123456789012345678,987654321098765432
-MAX_STAFF_IMAGE_BYTES=10485760
-```
-
-`STAFF_ROLE_ID` avec un seul identifiant reste également accepté.
-
-## Base de données
-
-La migration automatique crée :
+### Membres
 
 ```text
-card_imports
+/carte proposer
 ```
 
-Chaque tentative conserve :
+Sources acceptées :
 
-- la carte concernée ;
-- l'identifiant Discord de l'auteur ;
-- le type de source ;
-- l'URL ou le nom du fichier ;
-- le résultat de l'import ;
-- le résultat de la vérification ;
-- la date.
+- une URL HTTPS ;
+- une image PNG ;
+- un nom français, anglais ou un identifiant pour aider à reconnaître la carte.
+
+Le bot prépare la fiche depuis YGOPRODeck, enregistre la demande dans `card_submissions`, vérifie les doublons, puis l'envoie dans le salon de validation.
+
+### Staff
+
+```text
+/base demandes
+/base examiner_demande
+/base ajouter_carte
+/base verifier_carte
+```
+
+`/base ajouter_carte` reste un ajout immédiat réservé au staff. Pour le circuit avec validation, les membres utilisent `/carte proposer`.
+
+## Boutons de validation
+
+- **Valider** : ajoute une nouvelle carte si aucun doublon bloquant n'existe.
+- **Mettre à jour** : remplace les données d'une fiche ayant exactement le même identifiant YGOPRODeck.
+- **À corriger** : ferme la demande et demande au membre d'en envoyer une nouvelle version corrigée.
+- **Refuser** : ferme la demande sans ajouter la carte.
+
+Les boutons sont persistants : ils sont restaurés après un redémarrage du bot.
+
+## Détection des doublons
+
+Madame Rilliona compare :
+
+- l'identifiant YGOPRODeck ;
+- le nom français normalisé ;
+- le nom anglais normalisé ;
+- les noms très ressemblants.
+
+Une deuxième proposition active portant sur le même identifiant est refusée automatiquement.
+
+## Variables Railway
+
+```env
+DISCORD_TOKEN=...
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+GUILD_ID=...
+STAFF_ROLE_IDS=123456789012345678
+CARD_REVIEW_CHANNEL_ID=123456789012345678
+CARD_IMAGE_DIRECTORY=/app/data/card_images
+MAX_STAFF_IMAGE_BYTES=10485760
+LOG_LEVEL=INFO
+```
+
+`CARD_REVIEW_CHANNEL_ID` est recommandé. Sans cette variable, les demandes restent accessibles avec `/base demandes` et `/base examiner_demande`.
+
+## Permissions dans le salon de validation
+
+Le bot doit pouvoir :
+
+- voir le salon ;
+- envoyer des messages ;
+- intégrer des liens ;
+- joindre des fichiers ;
+- voir les anciens messages.
 
 ## Railway
 
-Place les fichiers directement à la racine du dépôt :
-
 ```text
-bot.py
-config.py
-database_manager.py
-requirements.txt
-railway.toml
-cogs/
-models/
-repositories/
-services/
-utils/
+Root Directory : vide
+Start Command : python bot.py
 ```
 
-Commande de démarrage :
-
-```text
-python bot.py
-```
-
-Pour conserver les PNG du staff après les redéploiements, monte un volume Railway sur le chemin défini par `CARD_IMAGE_DIRECTORY`, par défaut `/app/data/card_images`.
+Un volume persistant monté sur `/app/data` est recommandé pour conserver les PNG proposés et validés après les redéploiements.

@@ -59,6 +59,7 @@ class Settings:
     random_discovery_interval_minutes: int
     random_discovery_initial_delay_seconds: int
     staff_role_ids: tuple[int, ...]
+    card_review_channel_id: int | None
     max_staff_image_bytes: int
 
     @classmethod
@@ -83,6 +84,16 @@ class Settings:
             os.getenv("CARD_IMAGE_DIRECTORY", "/app/data/card_images")
         ).expanduser()
 
+        raw_review_channel_id = os.getenv("CARD_REVIEW_CHANNEL_ID", "").strip()
+        card_review_channel_id: int | None = None
+        if raw_review_channel_id:
+            try:
+                card_review_channel_id = int(raw_review_channel_id)
+            except ValueError as error:
+                raise RuntimeError(
+                    "CARD_REVIEW_CHANNEL_ID doit être un identifiant numérique."
+                ) from error
+
         return cls(
             discord_token=token,
             database_url=database_url,
@@ -101,6 +112,7 @@ class Settings:
                 minimum=30,
             ),
             staff_role_ids=_env_int_tuple("STAFF_ROLE_IDS", "STAFF_ROLE_ID"),
+            card_review_channel_id=card_review_channel_id,
             max_staff_image_bytes=_env_int(
                 "MAX_STAFF_IMAGE_BYTES",
                 10 * 1024 * 1024,

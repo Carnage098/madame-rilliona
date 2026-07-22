@@ -13,7 +13,7 @@ class CardApiService:
 
     def __init__(self, timeout_seconds: int = 90) -> None:
         self.timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-        self.headers = {"User-Agent": "Madame-Rilliona/2.9"}
+        self.headers = {"User-Agent": "Madame-Rilliona/3.0"}
 
     async def _request_json(
         self,

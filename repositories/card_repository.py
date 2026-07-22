@@ -7,6 +7,7 @@ from typing import Any
 import asyncpg
 
 from models.card import Card
+from models.card_submission import DuplicateMatch
 from utils.text import normalize_search_text
 
 
@@ -249,6 +250,88 @@ class CardRepository:
             """
         )
         return {str(row["category"]): int(row["total"]) for row in rows}
+
+    async def duplicate_candidates(
+        self,
+        candidate: Card,
+        *,
+        limit: int = 5,
+        fuzzy_threshold: float = 0.82,
+    ) -> list[DuplicateMatch]:
+        """Repère les doublons exacts et les noms très proches déjà enregistrés."""
+        rows = await self.pool.fetch(
+            "SELECT ygoprodeck_id, name_fr, name_en FROM cards"
+        )
+        candidate_names = tuple(
+            value
+            for value in (
+                normalize_search_text(candidate.name_fr),
+                normalize_search_text(candidate.name_en),
+            )
+            if value
+        )
+
+        matches: list[DuplicateMatch] = []
+        for row in rows:
+            card_id = int(row["ygoprodeck_id"])
+            display_name = str(row["name_fr"] or row["name_en"])
+            name_en = str(row["name_en"])
+
+            if card_id == candidate.ygoprodeck_id:
+                matches.append(
+                    DuplicateMatch(
+                        card_id=card_id,
+                        display_name=display_name,
+                        name_en=name_en,
+                        match_type="exact_id",
+                        score=1.0,
+                    )
+                )
+                continue
+
+            existing_names = tuple(
+                value
+                for value in (
+                    normalize_search_text(row["name_fr"]),
+                    normalize_search_text(row["name_en"]),
+                )
+                if value
+            )
+            if not candidate_names or not existing_names:
+                continue
+
+            if set(candidate_names) & set(existing_names):
+                match_type = "exact_name"
+                score = 1.0
+            else:
+                score = max(
+                    SequenceMatcher(None, proposed, existing).ratio()
+                    for proposed in candidate_names
+                    for existing in existing_names
+                )
+                if score < fuzzy_threshold:
+                    continue
+                match_type = "similar"
+
+            matches.append(
+                DuplicateMatch(
+                    card_id=card_id,
+                    display_name=display_name,
+                    name_en=name_en,
+                    match_type=match_type,
+                    score=score,
+                )
+            )
+
+        priority = {"exact_id": 0, "exact_name": 1, "similar": 2}
+        matches.sort(
+            key=lambda item: (
+                priority.get(item.match_type, 9),
+                -item.score,
+                item.display_name.casefold(),
+            )
+        )
+        return matches[:limit]
 
     async def record_import(
         self,

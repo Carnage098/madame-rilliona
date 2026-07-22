@@ -1,0 +1,26 @@
+MADAME RILLIONA V3.0 — MIGRATION
+
+1. Remplacer tous les fichiers de l'ancienne version par le contenu de cette archive.
+2. Ne pas conserver d'anciens dossiers database/, start.py ou flat_import_compat.py.
+3. Ajouter dans Railway :
+
+   CARD_REVIEW_CHANNEL_ID=identifiant_du_salon_staff
+   STAFF_ROLE_IDS=identifiant_du_role_staff
+
+4. Vérifier que le bot peut écrire, intégrer des liens, joindre des fichiers et lire l'historique dans le salon staff.
+5. Redéployer avec : python bot.py
+
+La migration PostgreSQL est automatique. Elle crée la table card_submissions et ne supprime aucune carte, aucun archétype et aucun combo.
+
+TEST CONSEILLÉ
+
+A. Avec un compte membre :
+   /carte proposer source:Site internet url:https://ygoprodeck.com/card/blue-eyes-white-dragon-7485
+
+B. Dans le salon staff :
+   vérifier la fiche et le rapport de doublons ;
+   utiliser Valider si la carte est absente ;
+   utiliser Mettre à jour si le même ID existe déjà.
+
+C. Vérifier ensuite :
+   /base verifier_carte carte:89631139

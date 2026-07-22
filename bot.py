@@ -13,12 +13,15 @@ from config import SETTINGS
 from database_manager import Database
 from repositories.archetype_repository import ArchetypeRepository
 from repositories.card_repository import CardRepository
+from repositories.card_submission_repository import CardSubmissionRepository
 from repositories.combo_repository import ComboRepository
 from services.card_api_service import CardApiService
 from services.card_catalog_service import CardCatalogService
 from services.card_image_service import CardImageService
 from services.card_import_service import CardImportService
+from services.card_submission_service import CardSubmissionService
 from services.combo_service import ComboService
+from views.card_submission_review import CardSubmissionReviewView
 
 
 LOGGER = logging.getLogger(__name__)
@@ -43,6 +46,7 @@ class MadameRillionaBot(commands.Bot):
         self.http_session: aiohttp.ClientSession | None = None
 
         self.card_repository: CardRepository | None = None
+        self.card_submission_repository: CardSubmissionRepository | None = None
         self.archetype_repository: ArchetypeRepository | None = None
         self.combo_repository: ComboRepository | None = None
 
@@ -50,12 +54,14 @@ class MadameRillionaBot(commands.Bot):
         self.card_catalog_service: CardCatalogService | None = None
         self.card_image_service: CardImageService | None = None
         self.card_import_service: CardImportService | None = None
+        self.card_submission_service: CardSubmissionService | None = None
         self.combo_service: ComboService | None = None
 
         self.card_api: CardApiService | None = None
         self.card_catalog: CardCatalogService | None = None
         self.card_images: CardImageService | None = None
         self.card_imports: CardImportService | None = None
+        self.card_submissions: CardSubmissionService | None = None
 
         self._random_discovery_task: asyncio.Task[None] | None = None
 
@@ -69,13 +75,14 @@ class MadameRillionaBot(commands.Bot):
             timeout=aiohttp.ClientTimeout(total=180, connect=30),
             headers={
                 "User-Agent": (
-                    "Madame-Rilliona-Discord-Bot/2.9 "
+                    "Madame-Rilliona-Discord-Bot/3.0 "
                     "(Yu-Gi-Oh card, archetype and combo library)"
                 )
             },
         )
 
         self.card_repository = CardRepository(pool)
+        self.card_submission_repository = CardSubmissionRepository(pool)
         self.archetype_repository = ArchetypeRepository(pool)
         self.combo_repository = ComboRepository(pool)
 
@@ -93,6 +100,14 @@ class MadameRillionaBot(commands.Bot):
             images=self.card_image_service,
             max_image_bytes=SETTINGS.max_staff_image_bytes,
         )
+        self.card_submission_service = CardSubmissionService(
+            catalog=self.card_catalog_service,
+            cards=self.card_repository,
+            submissions=self.card_submission_repository,
+            images=self.card_image_service,
+            imports=self.card_import_service,
+            max_image_bytes=SETTINGS.max_staff_image_bytes,
+        )
         self.combo_service = ComboService(
             archetypes=self.archetype_repository,
             combos=self.combo_repository,
@@ -102,6 +117,24 @@ class MadameRillionaBot(commands.Bot):
         self.card_catalog = self.card_catalog_service
         self.card_images = self.card_image_service
         self.card_imports = self.card_import_service
+        self.card_submissions = self.card_submission_service
+
+        pending_submissions = await self.card_submission_repository.list_actionable(
+            limit=500
+        )
+        restored_views = 0
+        for submission in pending_submissions:
+            if submission.review_message_id is None:
+                continue
+            self.add_view(
+                CardSubmissionReviewView(self, submission.id),
+                message_id=submission.review_message_id,
+            )
+            restored_views += 1
+        LOGGER.info(
+            "%s vue(s) persistante(s) de validation restaurée(s).",
+            restored_views,
+        )
 
         for extension in COGS:
             await self.load_extension(extension)
