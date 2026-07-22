@@ -13,19 +13,28 @@ from utils.text import normalize_search_text
 UPSERT_SQL = """
 INSERT INTO cards (
     ygoprodeck_id, name_fr, name_en, description_fr, description_en,
-    card_type, race, archetype, attribute, level, rank, linkval,
-    atk, def, scale, image_url, image_small_url, updated_at
+    card_type, frame_type, card_category, deck_section, classification,
+    race, archetype, attribute, level, rank, linkval,
+    atk, def, scale, typeline, link_markers,
+    ban_tcg, ban_ocg, ban_goat, ygoprodeck_url,
+    image_url, image_small_url, import_source, updated_at
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9,
-    $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+    $11, $12, $13, $14, $15, $16, $17, $18, $19,
+    $20, $21, $22, $23, $24, $25, $26, $27, $28,
+    CURRENT_TIMESTAMP
 )
 ON CONFLICT (ygoprodeck_id) DO UPDATE SET
-    name_fr = EXCLUDED.name_fr,
+    name_fr = COALESCE(EXCLUDED.name_fr, cards.name_fr),
     name_en = EXCLUDED.name_en,
-    description_fr = EXCLUDED.description_fr,
+    description_fr = COALESCE(EXCLUDED.description_fr, cards.description_fr),
     description_en = EXCLUDED.description_en,
     card_type = EXCLUDED.card_type,
+    frame_type = EXCLUDED.frame_type,
+    card_category = EXCLUDED.card_category,
+    deck_section = EXCLUDED.deck_section,
+    classification = EXCLUDED.classification,
     race = EXCLUDED.race,
     archetype = EXCLUDED.archetype,
     attribute = EXCLUDED.attribute,
@@ -35,8 +44,15 @@ ON CONFLICT (ygoprodeck_id) DO UPDATE SET
     atk = EXCLUDED.atk,
     def = EXCLUDED.def,
     scale = EXCLUDED.scale,
+    typeline = EXCLUDED.typeline,
+    link_markers = EXCLUDED.link_markers,
+    ban_tcg = EXCLUDED.ban_tcg,
+    ban_ocg = EXCLUDED.ban_ocg,
+    ban_goat = EXCLUDED.ban_goat,
+    ygoprodeck_url = EXCLUDED.ygoprodeck_url,
     image_url = EXCLUDED.image_url,
     image_small_url = EXCLUDED.image_small_url,
+    import_source = EXCLUDED.import_source,
     updated_at = CURRENT_TIMESTAMP
 """
 
@@ -54,6 +70,10 @@ class CardRepository:
             card.description_fr,
             card.description_en,
             card.card_type,
+            card.frame_type,
+            card.card_category,
+            card.deck_section,
+            card.classification,
             card.race,
             card.archetype,
             card.attribute,
@@ -63,8 +83,15 @@ class CardRepository:
             card.atk,
             card.defense,
             card.scale,
+            list(card.typeline),
+            list(card.link_markers),
+            card.ban_tcg,
+            card.ban_ocg,
+            card.ban_goat,
+            card.ygoprodeck_url,
             card.image_url,
             card.image_small_url,
+            card.import_source,
         )
 
     async def upsert(self, card: Card) -> None:
@@ -78,7 +105,10 @@ class CardRepository:
         async with self.pool.acquire() as connection:
             async with connection.transaction():
                 for index in range(0, len(values), batch_size):
-                    await connection.executemany(UPSERT_SQL, values[index:index + batch_size])
+                    await connection.executemany(
+                        UPSERT_SQL,
+                        values[index:index + batch_size],
+                    )
         return len(values)
 
     async def search(self, query: str, limit: int = 10) -> list[Card]:
@@ -124,7 +154,6 @@ class CardRepository:
         return SequenceMatcher(None, query, candidate).ratio() * 500.0
 
     async def search_normalized(self, query: str, limit: int = 10) -> list[Card]:
-        """Recherche de secours, tolérante aux accents, tirets et apostrophes."""
         normalized_query = normalize_search_text(query)
         if not normalized_query:
             return []
@@ -182,18 +211,41 @@ class CardRepository:
         )
         return Card.from_record(dict(row)) if row else None
 
-    async def list_by_archetype(self, archetype: str, limit: int = 50) -> list[Card]:
+    async def list_by_archetype(self, archetype: str, limit: int = 250) -> list[Card]:
+        normalized = archetype.strip()
         rows = await self.pool.fetch(
             """
             SELECT * FROM cards
-            WHERE archetype ILIKE $1
-            ORDER BY COALESCE(name_fr, name_en)
-            LIMIT $2
+            WHERE LOWER(COALESCE(archetype, '')) = LOWER($1)
+               OR archetype ILIKE $2
+            ORDER BY card_category, deck_section, COALESCE(name_fr, name_en)
+            LIMIT $3
             """,
-            f"%{archetype.strip()}%",
+            normalized,
+            f"%{normalized}%",
             limit,
         )
         return [Card.from_record(dict(row)) for row in rows]
 
+    async def count_by_archetype(self, archetype: str) -> int:
+        return int(
+            await self.pool.fetchval(
+                "SELECT COUNT(*) FROM cards WHERE LOWER(COALESCE(archetype, '')) = LOWER($1)",
+                archetype.strip(),
+            )
+            or 0
+        )
+
     async def count(self) -> int:
         return int(await self.pool.fetchval("SELECT COUNT(*) FROM cards") or 0)
+
+    async def category_counts(self) -> dict[str, int]:
+        rows = await self.pool.fetch(
+            """
+            SELECT COALESCE(card_category, 'Non classée') AS category, COUNT(*) AS total
+            FROM cards
+            GROUP BY COALESCE(card_category, 'Non classée')
+            ORDER BY total DESC, category
+            """
+        )
+        return {str(row["category"]): int(row["total"]) for row in rows}

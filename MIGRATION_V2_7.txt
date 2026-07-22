@@ -1,0 +1,20 @@
+MADAME RILLIONA V2.7 — MIGRATION
+
+1. Remplacer entièrement les anciens fichiers par ceux de cette version.
+2. Conserver les variables DISCORD_TOKEN, DATABASE_URL et GUILD_ID.
+3. Ajouter facultativement :
+   RANDOM_DISCOVERY_ENABLED=true
+   RANDOM_DISCOVERY_INTERVAL_MINUTES=360
+   RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS=300
+4. Garder la commande Railway : python bot.py
+5. Redéployer le dernier commit.
+
+La base PostgreSQL est migrée automatiquement avec ALTER TABLE ... IF NOT EXISTS.
+Aucune suppression de cartes, d'archétypes ou de combos n'est effectuée.
+
+Test conseillé après déploiement :
+- /base statut
+- /carte rechercher Dragon Blanc aux Yeux Bleus
+- /archetype ajouter (avec un archétype de test)
+- /carte archetype
+- /base decouvrir_aleatoire

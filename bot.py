@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
+import random
 
 import aiohttp
 import discord
@@ -17,6 +20,8 @@ from services.card_image_service import CardImageService
 from services.combo_service import ComboService
 
 
+LOGGER = logging.getLogger(__name__)
+
 COGS = (
     "cogs.cards",
     "cogs.card_admin",
@@ -26,8 +31,6 @@ COGS = (
 
 
 class MadameRillionaBot(commands.Bot):
-    """Bot principal, compatible avec les architectures V2.2 à V2.5."""
-
     def __init__(self) -> None:
         super().__init__(
             command_prefix="!",
@@ -47,25 +50,24 @@ class MadameRillionaBot(commands.Bot):
         self.card_image_service: CardImageService | None = None
         self.combo_service: ComboService | None = None
 
-        # Anciens noms d'attributs initialisés pour les vieux cogs.
         self.card_api: CardApiService | None = None
         self.card_catalog: CardCatalogService | None = None
         self.card_images: CardImageService | None = None
+
+        self._random_discovery_task: asyncio.Task[None] | None = None
 
     async def setup_hook(self) -> None:
         await self.database.connect()
         await self.database.initialize_schema()
         pool = self.database.require_pool()
-        logging.getLogger(__name__).info(
-            "Connexion PostgreSQL établie et schéma vérifié."
-        )
+        LOGGER.info("Connexion PostgreSQL établie et schéma vérifié.")
 
         self.http_session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=180, connect=30),
             headers={
                 "User-Agent": (
-                    "Madame-Rilliona-Discord-Bot/2.5 "
-                    "(Yu-Gi-Oh card and combo library)"
+                    "Madame-Rilliona-Discord-Bot/2.7 "
+                    "(Yu-Gi-Oh card, archetype and combo library)"
                 )
             },
         )
@@ -87,38 +89,64 @@ class MadameRillionaBot(commands.Bot):
             combos=self.combo_repository,
         )
 
-        # Alias exigés par certaines versions précédentes des cogs.
         self.card_api = self.card_api_service
         self.card_catalog = self.card_catalog_service
         self.card_images = self.card_image_service
 
         for extension in COGS:
             await self.load_extension(extension)
-            logging.getLogger(__name__).info(
-                "Cog chargé : %s",
-                extension,
-            )
+            LOGGER.info("Cog chargé : %s", extension)
 
         if SETTINGS.guild_id is not None:
             guild = discord.Object(id=SETTINGS.guild_id)
             self.tree.copy_global_to(guild=guild)
             synced = await self.tree.sync(guild=guild)
-            logging.getLogger(__name__).info(
+            LOGGER.info(
                 "%s commande(s) synchronisée(s) sur le serveur configuré.",
                 len(synced),
             )
         else:
             synced = await self.tree.sync()
-            logging.getLogger(__name__).info(
-                "%s commande(s) globale(s) synchronisée(s).",
-                len(synced),
+            LOGGER.info("%s commande(s) globale(s) synchronisée(s).", len(synced))
+
+        if SETTINGS.random_discovery_enabled:
+            self._random_discovery_task = asyncio.create_task(
+                self._random_discovery_loop(),
+                name="madame-rilliona-random-card-discovery",
             )
+            LOGGER.info(
+                "Découverte aléatoire activée : intervalle de base %s minute(s).",
+                SETTINGS.random_discovery_interval_minutes,
+            )
+
+    async def _random_discovery_loop(self) -> None:
+        await self.wait_until_ready()
+        await asyncio.sleep(SETTINGS.random_discovery_initial_delay_seconds)
+
+        while not self.is_closed():
+            try:
+                if self.card_catalog_service is None:
+                    raise RuntimeError("Le catalogue de cartes n'est pas initialisé.")
+                card = await self.card_catalog_service.discover_random()
+                LOGGER.info(
+                    "Carte découverte aléatoirement et enregistrée : %s (%s).",
+                    card.display_name,
+                    card.ygoprodeck_id,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                LOGGER.exception("La découverte aléatoire d'une carte a échoué.")
+
+            base_seconds = SETTINGS.random_discovery_interval_minutes * 60
+            jittered_seconds = max(3600, int(base_seconds * random.uniform(0.85, 1.15)))
+            await asyncio.sleep(jittered_seconds)
 
     async def on_ready(self) -> None:
         if self.user is None:
             return
 
-        logging.getLogger(__name__).info(
+        LOGGER.info(
             "Madame Rilliona connectée en tant que %s (%s).",
             self.user,
             self.user.id,
@@ -127,11 +155,17 @@ class MadameRillionaBot(commands.Bot):
         await self.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
-                name="les archives de combos",
+                name="les cartes et les archétypes",
             )
         )
 
     async def close(self) -> None:
+        if self._random_discovery_task is not None:
+            self._random_discovery_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._random_discovery_task
+            self._random_discovery_task = None
+
         if self.http_session is not None and not self.http_session.closed:
             await self.http_session.close()
         self.http_session = None

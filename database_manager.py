@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS cards (
     description_fr TEXT,
     description_en TEXT,
     card_type TEXT,
+    frame_type TEXT,
+    card_category TEXT,
+    deck_section TEXT,
+    classification TEXT,
     race TEXT,
     archetype TEXT,
     attribute TEXT,
@@ -20,10 +24,31 @@ CREATE TABLE IF NOT EXISTS cards (
     atk INTEGER,
     def INTEGER,
     scale INTEGER,
+    typeline TEXT[] NOT NULL DEFAULT '{}',
+    link_markers TEXT[] NOT NULL DEFAULT '{}',
+    ban_tcg TEXT,
+    ban_ocg TEXT,
+    ban_goat TEXT,
+    ygoprodeck_url TEXT,
     image_url TEXT,
     image_small_url TEXT,
+    import_source TEXT NOT NULL DEFAULT 'ygoprodeck',
+    discovered_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS frame_type TEXT;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS card_category TEXT;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS deck_section TEXT;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS classification TEXT;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS typeline TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS link_markers TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS ban_tcg TEXT;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS ban_ocg TEXT;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS ban_goat TEXT;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS ygoprodeck_url TEXT;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS import_source TEXT NOT NULL DEFAULT 'ygoprodeck';
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS discovered_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 CREATE INDEX IF NOT EXISTS idx_cards_name_fr_lower
     ON cards (LOWER(COALESCE(name_fr, '')));
@@ -31,20 +56,31 @@ CREATE INDEX IF NOT EXISTS idx_cards_name_en_lower
     ON cards (LOWER(name_en));
 CREATE INDEX IF NOT EXISTS idx_cards_archetype_lower
     ON cards (LOWER(COALESCE(archetype, '')));
+CREATE INDEX IF NOT EXISTS idx_cards_category_lower
+    ON cards (LOWER(COALESCE(card_category, '')));
+CREATE INDEX IF NOT EXISTS idx_cards_deck_section_lower
+    ON cards (LOWER(COALESCE(deck_section, '')));
 
 CREATE TABLE IF NOT EXISTS archetypes (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
+    api_name TEXT,
     presentation TEXT NOT NULL DEFAULT '',
     play_style TEXT NOT NULL DEFAULT '',
     difficulty TEXT NOT NULL DEFAULT 'Intermédiaire',
     created_by BIGINT,
+    cards_synced_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE archetypes ADD COLUMN IF NOT EXISTS api_name TEXT;
+ALTER TABLE archetypes ADD COLUMN IF NOT EXISTS cards_synced_at TIMESTAMPTZ;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_archetypes_name_lower
     ON archetypes (LOWER(name));
+CREATE INDEX IF NOT EXISTS idx_archetypes_api_name_lower
+    ON archetypes (LOWER(COALESCE(api_name, '')));
 
 CREATE TABLE IF NOT EXISTS combos (
     id BIGSERIAL PRIMARY KEY,
@@ -113,7 +149,6 @@ class Database:
             await connection.execute(SCHEMA_SQL)
 
     async def initialize_schema(self) -> None:
-        """Alias utilisé par certaines versions antérieures de bot.py."""
         await self.initialize()
 
     async def close(self) -> None:

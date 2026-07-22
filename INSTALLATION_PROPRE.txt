@@ -1,56 +1,35 @@
-MADAME RILLIONA V2.5 — INSTALLATION PROPRE
-==========================================
+INSTALLATION PROPRE — MADAME RILLIONA V2.7
 
-CAUSE DE L'ERREUR CORRIGÉE
---------------------------
-Le dépôt Railway mélangeait plusieurs versions :
-- services/combo_service.py importait ArchetypeRecord ;
-- models/archetype.py ne déclarait que Archetype ;
-- certains anciens fichiers utilisaient encore database.py ou le dossier database/.
+À la racine du dépôt GitHub :
+- bot.py
+- config.py
+- database_manager.py
+- requirements.txt
+- railway.toml
+- cogs/
+- models/
+- repositories/
+- services/
+- utils/
 
-INSTALLATION OBLIGATOIRE
-------------------------
-1. Télécharge et décompresse cette archive.
-2. Dans GitHub, supprime les anciens fichiers du projet avant de copier la V2.5.
-3. Supprime spécialement :
-   - start.py
-   - flat_import_compat.py
-   - database.py
-   - le dossier database/
-   - les anciens dossiers models/, repositories/, services/, cogs/ et utils/
-4. Copie ensuite TOUT le contenu de cette archive à la racine du dépôt.
-5. Vérifie que bot.py et database_manager.py sont directement à la racine.
+Supprimer les anciens éléments incompatibles :
+- database.py
+- database/
+- start.py
+- flat_import_compat.py
 
-STRUCTURE ATTENDUE
-------------------
-bot.py
-config.py
-database_manager.py
-startup_check.py
-requirements.txt
-railway.toml
-models/
-repositories/
-services/
-cogs/
-utils/
+Railway :
+- Root Directory : vide
+- Start Command : python bot.py
 
-RAILWAY
--------
-Root Directory : vide
-Start Command   : python bot.py
+Variables obligatoires :
+- DISCORD_TOKEN
+- DATABASE_URL
 
-Variables :
-DISCORD_TOKEN=...
-DATABASE_URL=${{Postgres.DATABASE_URL}}
-GUILD_ID=...
-CARD_IMAGE_DIRECTORY=/app/data/card_images
-LOG_LEVEL=INFO
-
-TEST FACULTATIF
----------------
-Avant le lancement réel :
-python startup_check.py
-
-Le test doit finir par :
-Tous les imports de Madame Rilliona sont valides.
+Variables recommandées :
+- GUILD_ID
+- CARD_IMAGE_DIRECTORY=/app/data/card_images
+- LOG_LEVEL=INFO
+- RANDOM_DISCOVERY_ENABLED=true
+- RANDOM_DISCOVERY_INTERVAL_MINUTES=360
+- RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS=300

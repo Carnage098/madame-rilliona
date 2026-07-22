@@ -1,24 +1,61 @@
-# Madame Rilliona V2.6 — recherche de cartes corrigée
+# Madame Rilliona V2.7 — catalogue autonome
 
-Cette version corrige la commande `/carte rechercher` lorsque le catalogue local
-est vide, incomplet ou que le nom contient des accents, tirets ou apostrophes.
+Madame Rilliona construit maintenant progressivement sa propre bibliothèque Yu-Gi-Oh!.
 
-## Fonctionnement de la recherche
+## Enregistrement automatique
 
-1. Recherche par identifiant YGOPRODeck dans PostgreSQL.
-2. Recherche classique dans les noms français et anglais locaux.
-3. Recherche normalisée locale, tolérante aux accents et à la ponctuation.
-4. Recherche automatique dans l'API YGOPRODeck en français.
-5. Récupération des données anglaises par identifiant.
-6. Enregistrement automatique de la carte dans PostgreSQL.
+- `/carte rechercher` cherche localement, puis interroge YGOPRODeck si nécessaire.
+- Toute carte trouvée est enregistrée dans PostgreSQL.
+- Les noms et effets français et anglais sont conservés quand ils existent.
+- Les images sont téléchargées une seule fois au moment où elles sont affichées.
 
-Ainsi, la carte suivante fonctionne même avant une synchronisation complète :
+## Classement des cartes
 
-```text
-Dragon Blanc aux Yeux Bleus
+Chaque carte est classée avec :
+
+- catégorie : Monstre, Magie, Piège, Compétence, Jeton ou Autre ;
+- emplacement : Main Deck, Extra Deck, Zone Magie/Piège ou hors Deck principal ;
+- type précis et `frameType` ;
+- race/type, attribut, Niveau, Rang, Lien, ATK, DEF et Échelle Pendule ;
+- typeline et marqueurs Lien ;
+- archétype ;
+- statut des banlists TCG, OCG et GOAT lorsqu'il est fourni ;
+- source de l'import : recherche, archétype, découverte aléatoire ou catalogue complet.
+
+## Archétypes
+
+`/archetype ajouter` :
+
+1. reconnaît le nom canonique de l'archétype ;
+2. accepte également un nom français pouvant être déduit des cartes françaises ;
+3. télécharge toutes les cartes anglaises et françaises de l'archétype ;
+4. les classe et les enregistre ;
+5. crée ensuite la fiche locale de l'archétype.
+
+Commandes supplémentaires :
+
+- `/archetype synchroniser` met à jour toutes les cartes d'un archétype ;
+- `/carte archetype` importe automatiquement l'archétype si aucune carte locale n'existe ;
+- `/base decouvrir_aleatoire` enregistre immédiatement une carte aléatoire ;
+- `/base statut` affiche le nombre de cartes et leur répartition par catégorie.
+
+## Découverte aléatoire en arrière-plan
+
+Par défaut, le bot enregistre une carte aléatoire environ toutes les six heures, avec une légère variation aléatoire de l'intervalle.
+
+Variables Railway :
+
+```env
+RANDOM_DISCOVERY_ENABLED=true
+RANDOM_DISCOVERY_INTERVAL_MINUTES=360
+RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS=300
 ```
 
-## Structure
+La valeur minimale de l'intervalle est de 60 minutes. Mets `RANDOM_DISCOVERY_ENABLED=false` pour désactiver cette fonction.
+
+## Installation Railway
+
+Place directement à la racine du dépôt :
 
 ```text
 bot.py
@@ -26,7 +63,6 @@ config.py
 database_manager.py
 requirements.txt
 railway.toml
-startup_check.py
 cogs/
 models/
 repositories/
@@ -34,24 +70,10 @@ services/
 utils/
 ```
 
-## Installation GitHub/Railway
-
-1. Remplacer intégralement l'ancienne version par le contenu de cette archive.
-2. Ne pas conserver un ancien dossier `database/`, un ancien `database.py`,
-   `start.py` ou `flat_import_compat.py`.
-3. Laisser le Root Directory Railway vide lorsque `bot.py` est à la racine.
-4. Utiliser `python bot.py` comme commande de démarrage.
-5. Conserver `DISCORD_TOKEN`, `DATABASE_URL`, `GUILD_ID`,
-   `CARD_IMAGE_DIRECTORY` et `LOG_LEVEL`.
-
-## Commandes utiles
+Commande de démarrage :
 
 ```text
-/carte rechercher carte:Dragon Blanc aux Yeux Bleus
-/base statut
-/base synchroniser_cartes
+python bot.py
 ```
 
-`/base synchroniser_cartes` reste recommandé pour remplir tout le catalogue,
-notamment pour l'autocomplétion et `/carte archetype`, mais il n'est plus
-obligatoire pour rechercher une carte précise.
+La migration PostgreSQL est automatique au démarrage. Les anciennes cartes restent présentes et reçoivent les nouveaux champs lorsqu'elles sont retrouvées ou resynchronisées.
