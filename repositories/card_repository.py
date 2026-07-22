@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from difflib import SequenceMatcher
 from typing import Any
 
 import asyncpg
 
 from models.card import Card
+from utils.text import normalize_search_text
 
 
 UPSERT_SQL = """
@@ -65,6 +67,9 @@ class CardRepository:
             card.image_small_url,
         )
 
+    async def upsert(self, card: Card) -> None:
+        await self.pool.execute(UPSERT_SQL, *self._parameters(card))
+
     async def upsert_many(self, cards: Iterable[Card], batch_size: int = 500) -> int:
         values = [self._parameters(card) for card in cards]
         if not values:
@@ -78,6 +83,8 @@ class CardRepository:
 
     async def search(self, query: str, limit: int = 10) -> list[Card]:
         normalized = query.strip()
+        if not normalized:
+            return []
         rows = await self.pool.fetch(
             """
             SELECT *
@@ -98,6 +105,56 @@ class CardRepository:
             limit,
         )
         return [Card.from_record(dict(row)) for row in rows]
+
+    @staticmethod
+    def _name_score(query: str, name: str | None) -> float:
+        candidate = normalize_search_text(name)
+        if not query or not candidate:
+            return 0.0
+        if candidate == query:
+            return 1000.0
+        if candidate.startswith(query):
+            return 900.0 - max(0, len(candidate) - len(query)) / 100
+        if query in candidate:
+            return 800.0 - max(0, len(candidate) - len(query)) / 100
+        query_tokens = set(query.split())
+        candidate_tokens = set(candidate.split())
+        if query_tokens and query_tokens.issubset(candidate_tokens):
+            return 700.0 + len(query_tokens)
+        return SequenceMatcher(None, query, candidate).ratio() * 500.0
+
+    async def search_normalized(self, query: str, limit: int = 10) -> list[Card]:
+        """Recherche de secours, tolérante aux accents, tirets et apostrophes."""
+        normalized_query = normalize_search_text(query)
+        if not normalized_query:
+            return []
+
+        rows = await self.pool.fetch(
+            "SELECT ygoprodeck_id, name_fr, name_en FROM cards"
+        )
+        scored: list[tuple[float, int]] = []
+        for row in rows:
+            score = max(
+                self._name_score(normalized_query, row["name_fr"]),
+                self._name_score(normalized_query, row["name_en"]),
+            )
+            if score >= 300.0:
+                scored.append((score, int(row["ygoprodeck_id"])))
+
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        ids = [card_id for _, card_id in scored[:limit]]
+        if not ids:
+            return []
+
+        full_rows = await self.pool.fetch(
+            "SELECT * FROM cards WHERE ygoprodeck_id = ANY($1::BIGINT[])",
+            ids,
+        )
+        cards_by_id = {
+            int(row["ygoprodeck_id"]): Card.from_record(dict(row))
+            for row in full_rows
+        }
+        return [cards_by_id[card_id] for card_id in ids if card_id in cards_by_id]
 
     async def autocomplete(self, query: str, limit: int = 25) -> list[Card]:
         if not query.strip():

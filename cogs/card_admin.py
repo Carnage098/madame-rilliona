@@ -11,6 +11,18 @@ class CardAdminCog(commands.GroupCog, group_name="base", group_description="Admi
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
+    @app_commands.command(name="statut", description="Afficher l'état du catalogue de cartes")
+    async def catalogue_status(self, interaction: discord.Interaction) -> None:
+        count = await self.bot.card_repository.count()
+        description = (
+            f"**{count}** carte(s) sont actuellement enregistrée(s).\n\n"
+            "La commande `/carte rechercher` peut aussi récupérer automatiquement une carte absente."
+        )
+        await interaction.response.send_message(
+            embed=success_embed("État du catalogue", description),
+            ephemeral=True,
+        )
+
     @app_commands.command(name="synchroniser_cartes", description="Synchroniser les cartes depuis YGOPRODeck")
     @app_commands.default_permissions(manage_guild=True)
     async def synchronize_cards(self, interaction: discord.Interaction) -> None:

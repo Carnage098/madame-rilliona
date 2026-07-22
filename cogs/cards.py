@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from utils.embeds import card_embed, error_embed
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class CardCog(commands.GroupCog, group_name="carte", group_description="Consulter le catalogue de cartes"):
@@ -19,19 +24,30 @@ class CardCog(commands.GroupCog, group_name="carte", group_description="Consulte
         ]
 
     @app_commands.command(name="rechercher", description="Rechercher une carte Yu-Gi-Oh!")
-    @app_commands.describe(carte="Commence à saisir le nom de la carte")
+    @app_commands.describe(carte="Nom français, nom anglais ou identifiant de la carte")
     @app_commands.autocomplete(carte=card_autocomplete)
     async def search_card(self, interaction: discord.Interaction, carte: str) -> None:
-        await interaction.response.defer()
-        card = None
-        if carte.isdigit():
-            card = await self.bot.card_repository.get_by_id(int(carte))
-        if card is None:
-            results = await self.bot.card_repository.search(carte, limit=1)
-            card = results[0] if results else None
+        await interaction.response.defer(thinking=True)
+
+        try:
+            card = await self.bot.card_catalog_service.find_or_fetch(carte)
+        except Exception:
+            LOGGER.exception("Échec de la recherche de carte pour %r", carte)
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Recherche temporairement indisponible",
+                    "La base externe n'a pas répondu correctement. Réessaie dans quelques instants.",
+                ),
+                ephemeral=True,
+            )
+            return
+
         if card is None:
             await interaction.followup.send(
-                embed=error_embed("Carte introuvable", "Synchronise d'abord le catalogue avec `/base synchroniser_cartes`."),
+                embed=error_embed(
+                    "Carte introuvable",
+                    "Vérifie l'orthographe du nom français ou anglais. Un membre du staff peut aussi lancer `/base synchroniser_cartes`.",
+                ),
                 ephemeral=True,
             )
             return
@@ -40,7 +56,9 @@ class CardCog(commands.GroupCog, group_name="carte", group_description="Consulte
         try:
             image_path = await self.bot.card_image_service.get(card)
         except Exception:
+            LOGGER.exception("Impossible de récupérer l'image de la carte %s", card.ygoprodeck_id)
             image_path = None
+
         if image_path:
             file = discord.File(image_path, filename=image_path.name)
             embed.set_image(url=f"attachment://{image_path.name}")
@@ -56,7 +74,10 @@ class CardCog(commands.GroupCog, group_name="carte", group_description="Consulte
         cards = await self.bot.card_repository.list_by_archetype(nom)
         if not cards:
             await interaction.followup.send(
-                embed=error_embed("Aucune carte", "Aucune carte ne correspond à cet archétype."),
+                embed=error_embed(
+                    "Aucune carte",
+                    "Aucune carte locale ne correspond à cet archétype. Lance d'abord `/base synchroniser_cartes`.",
+                ),
                 ephemeral=True,
             )
             return
