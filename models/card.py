@@ -53,3 +53,9 @@ class Card:
             image_url=row.get("image_url"),
             image_small_url=row.get("image_small_url"),
         )
+
+
+# Alias de compatibilité avec les anciennes versions du projet.
+CardRecord = Card
+
+__all__ = ("Card", "CardRecord")

@@ -112,6 +112,10 @@ class Database:
         async with pool.acquire() as connection:
             await connection.execute(SCHEMA_SQL)
 
+    async def initialize_schema(self) -> None:
+        """Alias utilisé par certaines versions antérieures de bot.py."""
+        await self.initialize()
+
     async def close(self) -> None:
         if self.pool is None:
             return

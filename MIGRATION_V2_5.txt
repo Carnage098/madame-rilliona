@@ -1,0 +1,14 @@
+V2.5 — CORRECTIF DE COMPATIBILITÉ
+=================================
+
+- ajout de ArchetypeRecord = Archetype ;
+- ajout de CardRecord = Card ;
+- ajout de ComboRecord = Combo ;
+- ajout de services/combo_service.py ;
+- ajout de Database.initialize_schema() ;
+- conservation simultanée des attributs card_api/card_api_service,
+  card_catalog/card_catalog_service et card_images/card_image_service ;
+- utilisation définitive de database_manager.py pour éviter le conflit avec
+  l'ancien dossier database/ ;
+- ajout d'un contrôle startup_check.py ;
+- bot.py reconstruit sans instance globale créée lors de l'import.

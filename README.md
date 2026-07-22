@@ -29,3 +29,14 @@ utils/
    `CARD_IMAGE_DIRECTORY`.
 
 Les tables PostgreSQL sont créées automatiquement au démarrage.
+
+
+## Correctif V2.4 — conflit `database`
+
+La connexion PostgreSQL est maintenant définie dans `database_manager.py`. `bot.py` utilise `from database_manager import Database`, ce qui évite tout conflit avec un éventuel ancien dossier `database/` présent dans le dépôt.
+
+## Correctif V2.5
+
+Cette archive est une version complète. Elle ne doit pas être copiée par-dessus
+un dépôt contenant des fichiers de versions précédentes. Consulte
+`INSTALLATION_PROPRE.txt` et remplace intégralement l'ancien code.

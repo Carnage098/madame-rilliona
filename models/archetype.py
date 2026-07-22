@@ -7,6 +7,8 @@ from typing import Any, Mapping
 
 @dataclass(slots=True)
 class Archetype:
+    """Archétype enregistré dans la bibliothèque de Madame Rilliona."""
+
     id: int
     name: str
     presentation: str
@@ -28,3 +30,10 @@ class Archetype:
             created_by=row.get("created_by"),
             created_at=row.get("created_at"),
         )
+
+
+# Compatibilité avec les premières versions de services/combo_service.py.
+# Les deux noms représentent exactement le même modèle.
+ArchetypeRecord = Archetype
+
+__all__ = ("Archetype", "ArchetypeRecord")

@@ -54,3 +54,9 @@ class Combo:
             created_by=row.get("created_by"),
             created_at=row.get("created_at"),
         )
+
+
+# Alias de compatibilité avec les anciennes versions du projet.
+ComboRecord = Combo
+
+__all__ = ("Combo", "ComboRecord")
