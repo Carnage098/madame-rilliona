@@ -135,8 +135,9 @@ class CardAdminCog(
             for name, total in categories.items()
         ) or "• Aucune carte classée"
         discovery_status = (
-            f"active, une découverte environ toutes les "
-            f"{SETTINGS.random_discovery_interval_minutes} minutes"
+            f"active, une tentative toutes les "
+            f"{SETTINGS.random_discovery_interval_seconds} secondes "
+            f"(jusqu’à {SETTINGS.random_discovery_max_attempts} tirages si doublons)"
             if SETTINGS.random_discovery_enabled
             else "désactivée"
         )
@@ -403,13 +404,15 @@ class CardAdminCog(
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            card = await self.bot.card_catalog_service.discover_random()
-        except Exception:
+            card = await self.bot.card_catalog_service.discover_random(
+                max_attempts=SETTINGS.random_discovery_max_attempts
+            )
+        except Exception as error:
             LOGGER.exception("Échec de la découverte aléatoire")
             await interaction.followup.send(
                 embed=error_embed(
                     "Découverte impossible",
-                    "La base externe n'a pas répondu correctement.",
+                    str(error),
                 ),
                 ephemeral=True,
             )

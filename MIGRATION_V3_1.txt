@@ -1,0 +1,13 @@
+MADAME RILLIONA V3.1 — DÉCOUVERTE RAPIDE
+
+1. Remplacer complètement les fichiers de la V3.0 par cette version.
+2. Dans Railway, supprimer RANDOM_DISCOVERY_INTERVAL_MINUTES si elle existe.
+3. Ajouter :
+   RANDOM_DISCOVERY_ENABLED=true
+   RANDOM_DISCOVERY_INTERVAL_SECONDS=60
+   RANDOM_DISCOVERY_MAX_ATTEMPTS=8
+   RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS=30
+4. Redéployer le dernier commit.
+
+La découverte vérifie l’identifiant YGOPRODeck dans PostgreSQL avant insertion.
+Une carte déjà présente est ignorée et ne remplace pas silencieusement la fiche existante.

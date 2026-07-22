@@ -56,7 +56,8 @@ class Settings:
     card_image_directory: Path
     log_level: str
     random_discovery_enabled: bool
-    random_discovery_interval_minutes: int
+    random_discovery_interval_seconds: int
+    random_discovery_max_attempts: int
     random_discovery_initial_delay_seconds: int
     staff_role_ids: tuple[int, ...]
     card_review_channel_id: int | None
@@ -101,15 +102,20 @@ class Settings:
             card_image_directory=image_directory,
             log_level=os.getenv("LOG_LEVEL", "INFO").upper().strip() or "INFO",
             random_discovery_enabled=_env_bool("RANDOM_DISCOVERY_ENABLED", True),
-            random_discovery_interval_minutes=_env_int(
-                "RANDOM_DISCOVERY_INTERVAL_MINUTES",
-                360,
+            random_discovery_interval_seconds=_env_int(
+                "RANDOM_DISCOVERY_INTERVAL_SECONDS",
+                60,
                 minimum=60,
+            ),
+            random_discovery_max_attempts=_env_int(
+                "RANDOM_DISCOVERY_MAX_ATTEMPTS",
+                8,
+                minimum=1,
             ),
             random_discovery_initial_delay_seconds=_env_int(
                 "RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS",
-                300,
-                minimum=30,
+                30,
+                minimum=5,
             ),
             staff_role_ids=_env_int_tuple("STAFF_ROLE_IDS", "STAFF_ROLE_ID"),
             card_review_channel_id=card_review_channel_id,

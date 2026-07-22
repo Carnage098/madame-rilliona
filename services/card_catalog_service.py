@@ -45,6 +45,7 @@ class CardCatalogService:
         self._archetype_sync_lock = asyncio.Lock()
         self._autocomplete_cache: dict[str, tuple[float, tuple[CardSuggestion, ...]]] = {}
         self._autocomplete_lock = asyncio.Lock()
+        self._random_discovery_lock = asyncio.Lock()
         self._autocomplete_ttl_seconds = 120.0
 
     @staticmethod
@@ -555,12 +556,49 @@ class CardCatalogService:
                 imported_count=imported,
             )
 
-    async def discover_random(self) -> Card:
-        english = await self.api.fetch_random()
-        if english is None or english.get("id") is None:
-            raise RuntimeError("YGOPRODeck n'a pas renvoyé de carte aléatoire valide.")
-        card_id = int(english["id"])
-        french = await self.api.fetch_by_id(card_id, language="fr")
-        card = self._build_card(english, french, import_source="random_discovery")
-        await self.repository.upsert(card)
-        return card
+    async def discover_random(self, *, max_attempts: int = 8) -> Card:
+        """Enregistre une carte aléatoire absente du catalogue local.
+
+        Une carte déjà présente est considérée comme un doublon et ignorée.
+        Plusieurs tirages sont autorisés afin d'éviter qu'une seule collision
+        empêche la découverte de la minute en cours.
+        """
+        attempts = max(1, min(int(max_attempts), 25))
+
+        async with self._random_discovery_lock:
+            duplicate_ids: list[int] = []
+            for _ in range(attempts):
+                english = await self.api.fetch_random()
+                if english is None or english.get("id") is None:
+                    continue
+
+                card_id = int(english["id"])
+                existing = await self.repository.get_by_id(card_id)
+                if existing is not None:
+                    duplicate_ids.append(card_id)
+                    continue
+
+                french = await self.api.fetch_by_id(card_id, language="fr")
+                card = self._build_card(
+                    english,
+                    french,
+                    import_source="random_discovery",
+                )
+
+                # Deuxième vérification juste avant l'écriture pour éviter
+                # une collision avec une commande manuelle exécutée en parallèle.
+                if await self.repository.get_by_id(card_id) is not None:
+                    duplicate_ids.append(card_id)
+                    continue
+
+                await self.repository.upsert(card)
+                return card
+
+        details = (
+            f" Identifiants déjà présents : {', '.join(map(str, duplicate_ids[:10]))}."
+            if duplicate_ids
+            else ""
+        )
+        raise RuntimeError(
+            f"Aucune nouvelle carte trouvée après {attempts} tentative(s)." + details
+        )

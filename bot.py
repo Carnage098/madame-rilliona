@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import random
 
 import aiohttp
 import discord
@@ -75,7 +74,7 @@ class MadameRillionaBot(commands.Bot):
             timeout=aiohttp.ClientTimeout(total=180, connect=30),
             headers={
                 "User-Agent": (
-                    "Madame-Rilliona-Discord-Bot/3.0 "
+                    "Madame-Rilliona-Discord-Bot/3.1 "
                     "(Yu-Gi-Oh card, archetype and combo library)"
                 )
             },
@@ -158,8 +157,9 @@ class MadameRillionaBot(commands.Bot):
                 name="madame-rilliona-random-card-discovery",
             )
             LOGGER.info(
-                "Découverte aléatoire activée : intervalle de base %s minute(s).",
-                SETTINGS.random_discovery_interval_minutes,
+                "Découverte aléatoire activée : une tentative toutes les %s seconde(s), %s essai(s) maximum contre les doublons.",
+                SETTINGS.random_discovery_interval_seconds,
+                SETTINGS.random_discovery_max_attempts,
             )
 
     async def _random_discovery_loop(self) -> None:
@@ -170,7 +170,9 @@ class MadameRillionaBot(commands.Bot):
             try:
                 if self.card_catalog_service is None:
                     raise RuntimeError("Le catalogue de cartes n'est pas initialisé.")
-                card = await self.card_catalog_service.discover_random()
+                card = await self.card_catalog_service.discover_random(
+                    max_attempts=SETTINGS.random_discovery_max_attempts
+                )
                 LOGGER.info(
                     "Carte découverte aléatoirement et enregistrée : %s (%s).",
                     card.display_name,
@@ -181,9 +183,7 @@ class MadameRillionaBot(commands.Bot):
             except Exception:
                 LOGGER.exception("La découverte aléatoire d'une carte a échoué.")
 
-            base_seconds = SETTINGS.random_discovery_interval_minutes * 60
-            jittered_seconds = max(3600, int(base_seconds * random.uniform(0.85, 1.15)))
-            await asyncio.sleep(jittered_seconds)
+            await asyncio.sleep(SETTINGS.random_discovery_interval_seconds)
 
     async def on_ready(self) -> None:
         if self.user is None:
