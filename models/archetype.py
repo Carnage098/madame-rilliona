@@ -2,25 +2,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any, Mapping
 
 
 @dataclass(slots=True)
-class ArchetypeRecord:
+class Archetype:
     id: int
     name: str
-    normalized_name: str
-    description: str | None
-    playstyle: str | None
-    difficulty: str | None
-    created_by: int
-    created_at: datetime
-    updated_at: datetime
+    presentation: str
+    play_style: str
+    difficulty: str
+    combo_count: int = 0
+    created_by: int | None = None
+    created_at: datetime | None = None
 
-
-@dataclass(slots=True)
-class ArchetypeSummary:
-    id: int
-    name: str
-    playstyle: str | None
-    difficulty: str | None
-    combo_count: int
+    @classmethod
+    def from_record(cls, row: Mapping[str, Any]) -> "Archetype":
+        return cls(
+            id=int(row["id"]),
+            name=str(row["name"]),
+            presentation=str(row.get("presentation") or ""),
+            play_style=str(row.get("play_style") or ""),
+            difficulty=str(row.get("difficulty") or "Intermédiaire"),
+            combo_count=int(row.get("combo_count") or 0),
+            created_by=row.get("created_by"),
+            created_at=row.get("created_at"),
+        )

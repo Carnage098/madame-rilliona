@@ -2,85 +2,79 @@ from __future__ import annotations
 
 import discord
 
-from models.card import CardRecord
+from models.archetype import Archetype
+from models.card import Card
+from models.combo import Combo
 from utils.text import truncate
 
 
-RILLIONA_COLOUR = discord.Colour.from_rgb(112, 84, 190)
+PURPLE = discord.Colour.from_rgb(118, 79, 168)
 
 
-def build_card_embed(card: CardRecord) -> discord.Embed:
+def error_embed(title: str, description: str) -> discord.Embed:
+    return discord.Embed(title=f"❌ {title}", description=description, colour=discord.Colour.red())
+
+
+def success_embed(title: str, description: str) -> discord.Embed:
+    return discord.Embed(title=f"✅ {title}", description=description, colour=discord.Colour.green())
+
+
+def card_embed(card: Card) -> discord.Embed:
     embed = discord.Embed(
         title=card.display_name,
-        description=truncate(card.display_description, 3500),
-        colour=RILLIONA_COLOUR,
-        url=card.ygoprodeck_url,
+        description=truncate(card.display_description, 3900),
+        colour=PURPLE,
     )
-
-    type_parts = [card.display_type]
-    if card.display_race:
-        type_parts.append(card.display_race)
-
-    embed.add_field(
-        name="Type",
-        value=" • ".join(type_parts),
-        inline=False,
-    )
-
-    monster_stats: list[str] = []
+    if card.name_fr and card.name_fr != card.name_en:
+        embed.add_field(name="Nom anglais", value=card.name_en, inline=False)
+    if card.card_type:
+        embed.add_field(name="Type", value=card.card_type, inline=True)
+    if card.race:
+        embed.add_field(name="Race", value=card.race, inline=True)
+    if card.archetype:
+        embed.add_field(name="Archétype", value=card.archetype, inline=True)
+    stats = []
     if card.attribute:
-        monster_stats.append(f"**Attribut :** {card.attribute}")
+        stats.append(card.attribute)
     if card.level is not None:
-        monster_stats.append(f"**Niveau/Rang :** {card.level}")
-    if card.link_value is not None:
-        monster_stats.append(f"**Lien :** {card.link_value}")
-    if card.scale is not None:
-        monster_stats.append(f"**Échelle Pendule :** {card.scale}")
-    if card.attack is not None:
-        monster_stats.append(f"**ATK :** {card.attack}")
+        stats.append(f"Niveau {card.level}")
+    if card.rank is not None:
+        stats.append(f"Rang {card.rank}")
+    if card.linkval is not None:
+        stats.append(f"Lien {card.linkval}")
+    if card.atk is not None:
+        stats.append(f"ATK {card.atk}")
     if card.defense is not None:
-        monster_stats.append(f"**DEF :** {card.defense}")
+        stats.append(f"DEF {card.defense}")
+    if stats:
+        embed.add_field(name="Statistiques", value=" • ".join(stats), inline=False)
+    embed.set_footer(text=f"ID YGOPRODeck : {card.ygoprodeck_id}")
+    return embed
 
-    if monster_stats:
-        embed.add_field(
-            name="Caractéristiques",
-            value="\n".join(monster_stats),
-            inline=True,
-        )
 
-    if card.display_archetype:
-        embed.add_field(
-            name="Archétype",
-            value=card.display_archetype,
-            inline=True,
-        )
-
-    banlist_lines = []
-    if card.ban_tcg:
-        banlist_lines.append(f"**TCG :** {card.ban_tcg}")
-    if card.ban_ocg:
-        banlist_lines.append(f"**OCG :** {card.ban_ocg}")
-    if card.ban_goat:
-        banlist_lines.append(f"**GOAT :** {card.ban_goat}")
-
-    if banlist_lines:
-        embed.add_field(
-            name="Restrictions",
-            value="\n".join(banlist_lines),
-            inline=False,
-        )
-
-    if card.link_markers:
-        embed.add_field(
-            name="Flèches Lien",
-            value=", ".join(card.link_markers),
-            inline=False,
-        )
-
-    embed.set_footer(
-        text=(
-            f"Identifiant YGOPRODeck : {card.ygoprodeck_id} "
-            "• Catalogue de Madame Rilliona"
-        )
+def archetype_embed(archetype: Archetype) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"📚 {archetype.name}",
+        description=truncate(archetype.presentation, 3900),
+        colour=PURPLE,
     )
+    embed.add_field(name="Style de jeu", value=truncate(archetype.play_style, 1024), inline=False)
+    embed.add_field(name="Difficulté", value=archetype.difficulty, inline=True)
+    embed.add_field(name="Combos archivés", value=str(archetype.combo_count), inline=True)
+    return embed
+
+
+def combo_embed(combo: Combo) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"🧠 {combo.name}",
+        description=truncate(combo.description, 3900),
+        colour=PURPLE,
+    )
+    embed.add_field(name="Archétype", value=combo.archetype_name, inline=True)
+    embed.add_field(name="Format", value=combo.game_format, inline=True)
+    embed.add_field(name="Difficulté", value=combo.difficulty, inline=True)
+    embed.add_field(name="Type de ligne", value=combo.line_type, inline=True)
+    if combo.banlist:
+        embed.add_field(name="Banlist", value=truncate(combo.banlist, 1024), inline=True)
+    embed.set_footer(text=f"Combo ID : {combo.id} • {len(combo.steps)} étape(s)")
     return embed
