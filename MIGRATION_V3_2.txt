@@ -1,0 +1,24 @@
+MIGRATION V3.1 -> V3.2
+
+Nouvelles fonctions :
+- rôles stratégiques des cartes ;
+- alias et surnoms ;
+- recherche avancée ;
+- fiches d'archétypes intelligentes ;
+- diagnostic de la base.
+
+Nouvelles tables :
+- card_aliases ;
+- card_roles.
+
+Commandes ajoutées :
+- /carte definir_role
+- /carte retirer_role
+- /carte ajouter_alias
+- /carte retirer_alias
+- /carte filtrer
+- /archetype strategie
+- /base diagnostic
+
+La migration est exécutée automatiquement au démarrage par database_manager.py.
+Aucune suppression de données n'est effectuée.

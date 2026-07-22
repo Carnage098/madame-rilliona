@@ -1,15 +1,18 @@
-MADAME RILLIONA V3.1 — INSTALLATION PROPRE
+MADAME RILLIONA V3.2 — INSTALLATION PROPRE
 
 1. Remplace entièrement l'ancienne version par le contenu de cette archive.
-2. Ne conserve pas les anciens fichiers ou dossiers d'une autre version.
-3. Railway : Root Directory vide, Start Command = python bot.py
-4. Variables de découverte :
+2. Ne mélange pas les fichiers V3.1 et V3.2.
+3. Place bot.py, database_manager.py, cogs/, models/, repositories/, services/, utils/ et views/ directement à la racine GitHub.
+4. Railway : Root Directory vide.
+5. Railway : Start Command = python bot.py.
+6. Conserve DATABASE_URL, DISCORD_TOKEN, GUILD_ID, STAFF_ROLE_IDS et CARD_REVIEW_CHANNEL_ID.
+7. Pour la découverte toutes les 60 secondes :
    RANDOM_DISCOVERY_ENABLED=true
    RANDOM_DISCOVERY_INTERVAL_SECONDS=60
    RANDOM_DISCOVERY_MAX_ATTEMPTS=8
    RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS=30
-5. Supprime l'ancienne variable RANDOM_DISCOVERY_INTERVAL_MINUTES si elle existe.
-6. Redéploie le dernier commit.
+8. Supprime RANDOM_DISCOVERY_INTERVAL_MINUTES si cette ancienne variable existe.
+9. Redéploie le dernier commit.
 
-La découverte vérifie l'identifiant officiel dans PostgreSQL avant insertion.
-Une carte déjà présente est ignorée et un autre tirage est tenté.
+La migration crée automatiquement les tables card_aliases et card_roles.
+Les anciennes cartes, propositions, archétypes et combos sont conservés.

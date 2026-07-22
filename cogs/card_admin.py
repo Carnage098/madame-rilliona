@@ -371,6 +371,57 @@ class CardAdminCog(
         await self._send_submission_review(interaction, submission)
 
     @app_commands.command(
+        name="diagnostic",
+        description="Contrôler la qualité et la santé de la base (staff)",
+    )
+    async def database_diagnostic(
+        self,
+        interaction: discord.Interaction,
+    ) -> None:
+        if not await self._require_staff(interaction):
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        diagnostic = await self.bot.card_knowledge_repository.diagnostic()
+        last_discovery = (
+            diagnostic.last_discovery_at.strftime("%d/%m/%Y à %H:%M UTC")
+            if diagnostic.last_discovery_at is not None
+            else "Aucune découverte enregistrée"
+        )
+        description = (
+            f"**Catalogue**\n"
+            f"• Cartes : **{diagnostic.total_cards}**\n"
+            f"• Sans effet français : **{diagnostic.missing_french_effect}**\n"
+            f"• Sans image distante : **{diagnostic.missing_image}**\n"
+            f"• Sans classement : **{diagnostic.missing_classification}**\n"
+            f"• Sans archétype : **{diagnostic.missing_archetype}**\n\n"
+            f"**Connaissances stratégiques**\n"
+            f"• Cartes sans rôle : **{diagnostic.roleless_cards}**\n"
+            f"• Alias enregistrés : **{diagnostic.aliases}**\n"
+            f"• Rôles attribués : **{diagnostic.strategic_roles}**\n\n"
+            f"**Contrôles**\n"
+            f"• Propositions en attente : **{diagnostic.pending_submissions}**\n"
+            f"• Noms dupliqués potentiels : **{diagnostic.exact_duplicate_names}**\n"
+            f"• Archétypes sans carte : **{diagnostic.empty_archetypes}**\n"
+            f"• Combos sans étape : **{diagnostic.combos_without_steps}**\n"
+            f"• Dernière découverte aléatoire : **{last_discovery}**"
+        )
+        embed = discord.Embed(
+            title="🩺 Diagnostic de Madame Rilliona",
+            description=description,
+            colour=(
+                discord.Colour.green()
+                if diagnostic.exact_duplicate_names == 0
+                and diagnostic.empty_archetypes == 0
+                and diagnostic.combos_without_steps == 0
+                else discord.Colour.orange()
+            ),
+        )
+        embed.set_footer(
+            text="Les cartes sans archétype incluent aussi les cartes génériques : ce n'est pas toujours une erreur."
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(
         name="synchroniser_cartes",
         description="Synchroniser toutes les cartes depuis YGOPRODeck",
     )

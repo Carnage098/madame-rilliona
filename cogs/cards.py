@@ -8,7 +8,9 @@ from discord.ext import commands
 
 from config import SETTINGS
 from models.card_submission import CardSubmission
-from utils.embeds import card_embed, error_embed, success_embed
+from models.card_knowledge import ROLE_LABELS, role_label
+from utils.embeds import add_card_knowledge, card_embed, error_embed, success_embed
+from utils.permissions import is_staff_member
 from views.card_submission_review import (
     CardSubmissionReviewView,
     duplicate_summary,
@@ -19,6 +21,13 @@ from views.card_submission_review import (
 LOGGER = logging.getLogger(__name__)
 
 
+ROLE_CHOICES = [
+    app_commands.Choice(name=label, value=value)
+    for value, label in ROLE_LABELS.items()
+]
+
+
+
 class CardCog(
     commands.GroupCog,
     group_name="carte",
@@ -26,6 +35,83 @@ class CardCog(
 ):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+
+    async def _require_staff(self, interaction: discord.Interaction) -> bool:
+        if is_staff_member(
+            interaction.user,
+            configured_role_ids=SETTINGS.staff_role_ids,
+        ):
+            return True
+        message = (
+            "Cette commande est réservée au staff : Administrateur, "
+            "Gérer le serveur, Gérer les messages ou rôle configuré dans STAFF_ROLE_IDS."
+        )
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                embed=error_embed("Permission refusée", message),
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                embed=error_embed("Permission refusée", message),
+                ephemeral=True,
+            )
+        return False
+
+    async def category_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        del self, interaction
+        values = ("Monstre", "Magie", "Piège", "Compétence", "Jeton", "Autre")
+        query = current.casefold().strip()
+        return [
+            app_commands.Choice(name=value, value=value)
+            for value in values
+            if not query or query in value.casefold()
+        ][:25]
+
+    async def section_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        del self, interaction
+        values = ("Main Deck", "Extra Deck", "Zone Magie/Piège", "Hors Deck principal")
+        query = current.casefold().strip()
+        return [
+            app_commands.Choice(name=value, value=value)
+            for value in values
+            if not query or query in value.casefold()
+        ][:25]
+
+    async def attribute_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        del self, interaction
+        values = ("DARK", "LIGHT", "EARTH", "WATER", "FIRE", "WIND", "DIVINE")
+        query = current.casefold().strip()
+        return [
+            app_commands.Choice(name=value, value=value)
+            for value in values
+            if not query or query in value.casefold()
+        ][:25]
+
+    async def role_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        del self, interaction
+        query = current.casefold().strip()
+        return [
+            app_commands.Choice(name=label, value=value)
+            for value, label in ROLE_LABELS.items()
+            if not query or query in label.casefold() or query in value.casefold()
+        ][:25]
 
     async def card_autocomplete(
         self,
@@ -121,7 +207,17 @@ class CardCog(
             )
             return
 
-        embed = card_embed(card)
+        aliases = await self.bot.card_knowledge_repository.list_aliases(
+            card.ygoprodeck_id
+        )
+        roles = await self.bot.card_knowledge_repository.list_roles(
+            card.ygoprodeck_id
+        )
+        embed = add_card_knowledge(
+            card_embed(card),
+            aliases=aliases,
+            roles=roles,
+        )
         try:
             image_path = await self.bot.card_image_service.get(card)
         except Exception:
@@ -244,6 +340,285 @@ class CardCog(
             ),
             ephemeral=True,
         )
+
+    @app_commands.command(
+        name="definir_role",
+        description="Attribuer un rôle stratégique à une carte (staff)",
+    )
+    @app_commands.describe(
+        carte="Nom, alias ou identifiant de la carte",
+        role="Fonction de la carte dans un deck",
+        notes="Explication facultative du rôle",
+    )
+    @app_commands.autocomplete(carte=card_autocomplete)
+    @app_commands.choices(role=ROLE_CHOICES)
+    async def define_role(
+        self,
+        interaction: discord.Interaction,
+        carte: str,
+        role: app_commands.Choice[str],
+        notes: str | None = None,
+    ) -> None:
+        if not await self._require_staff(interaction):
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        card = await self.bot.card_catalog_service.find_or_fetch(carte)
+        if card is None:
+            await interaction.followup.send(
+                embed=error_embed("Carte introuvable", "Vérifie son nom ou son identifiant."),
+                ephemeral=True,
+            )
+            return
+        try:
+            assigned = await self.bot.card_knowledge_repository.set_role(
+                card_id=card.ygoprodeck_id,
+                role=role.value,
+                notes=notes,
+                assigned_by=interaction.user.id,
+            )
+        except ValueError as error:
+            await interaction.followup.send(
+                embed=error_embed("Rôle impossible", str(error)),
+                ephemeral=True,
+            )
+            return
+        await interaction.followup.send(
+            embed=success_embed(
+                "Rôle enregistré",
+                f"**{card.display_name}** est maintenant classée comme **{assigned.label}**."
+                + (f"\nNotes : {assigned.notes}" if assigned.notes else ""),
+            ),
+            ephemeral=True,
+        )
+
+    @app_commands.command(
+        name="retirer_role",
+        description="Retirer un rôle stratégique d'une carte (staff)",
+    )
+    @app_commands.autocomplete(carte=card_autocomplete)
+    @app_commands.choices(role=ROLE_CHOICES)
+    async def remove_role(
+        self,
+        interaction: discord.Interaction,
+        carte: str,
+        role: app_commands.Choice[str],
+    ) -> None:
+        if not await self._require_staff(interaction):
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        card = await self.bot.card_catalog_service.find_or_fetch(carte)
+        if card is None:
+            await interaction.followup.send(
+                embed=error_embed("Carte introuvable", "Vérifie son nom ou son identifiant."),
+                ephemeral=True,
+            )
+            return
+        removed = await self.bot.card_knowledge_repository.remove_role(
+            card_id=card.ygoprodeck_id,
+            role=role.value,
+        )
+        if not removed:
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Rôle absent",
+                    f"**{card.display_name}** ne possédait pas le rôle **{role_label(role.value)}**.",
+                ),
+                ephemeral=True,
+            )
+            return
+        await interaction.followup.send(
+            embed=success_embed(
+                "Rôle retiré",
+                f"Le rôle **{role_label(role.value)}** a été retiré de **{card.display_name}**.",
+            ),
+            ephemeral=True,
+        )
+
+    @app_commands.command(
+        name="ajouter_alias",
+        description="Ajouter un surnom ou une autre traduction à une carte (staff)",
+    )
+    @app_commands.describe(
+        carte="Nom, alias ou identifiant de la carte",
+        alias="Surnom, abréviation ou autre traduction",
+        langue="Langue ou origine facultative : FR, EN, JP, communauté…",
+    )
+    @app_commands.autocomplete(carte=card_autocomplete)
+    async def add_alias(
+        self,
+        interaction: discord.Interaction,
+        carte: str,
+        alias: str,
+        langue: str | None = None,
+    ) -> None:
+        if not await self._require_staff(interaction):
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        card = await self.bot.card_catalog_service.find_or_fetch(carte)
+        if card is None:
+            await interaction.followup.send(
+                embed=error_embed("Carte introuvable", "Vérifie son nom ou son identifiant."),
+                ephemeral=True,
+            )
+            return
+        try:
+            entry = await self.bot.card_knowledge_repository.add_alias(
+                card_id=card.ygoprodeck_id,
+                alias=alias,
+                language=langue,
+                source="staff",
+                created_by=interaction.user.id,
+            )
+        except ValueError as error:
+            await interaction.followup.send(
+                embed=error_embed("Alias impossible", str(error)),
+                ephemeral=True,
+            )
+            return
+        await interaction.followup.send(
+            embed=success_embed(
+                "Alias enregistré",
+                f"`{entry.alias}` permet maintenant de retrouver **{card.display_name}**.",
+            ),
+            ephemeral=True,
+        )
+
+    @app_commands.command(
+        name="retirer_alias",
+        description="Retirer un alias d'une carte (staff)",
+    )
+    @app_commands.autocomplete(carte=card_autocomplete)
+    async def remove_alias(
+        self,
+        interaction: discord.Interaction,
+        carte: str,
+        alias: str,
+    ) -> None:
+        if not await self._require_staff(interaction):
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        card = await self.bot.card_catalog_service.find_or_fetch(carte)
+        if card is None:
+            await interaction.followup.send(
+                embed=error_embed("Carte introuvable", "Vérifie son nom ou son identifiant."),
+                ephemeral=True,
+            )
+            return
+        removed = await self.bot.card_knowledge_repository.remove_alias(
+            card_id=card.ygoprodeck_id,
+            alias=alias,
+        )
+        if not removed:
+            await interaction.followup.send(
+                embed=error_embed("Alias absent", "Cet alias n'était pas associé à cette carte."),
+                ephemeral=True,
+            )
+            return
+        await interaction.followup.send(
+            embed=success_embed(
+                "Alias retiré",
+                f"`{alias}` n'est plus associé à **{card.display_name}**.",
+            ),
+            ephemeral=True,
+        )
+
+    @app_commands.command(
+        name="filtrer",
+        description="Rechercher des cartes par effet, statistiques, type ou rôle",
+    )
+    @app_commands.describe(
+        archetype="Nom ou partie du nom de l'archétype",
+        categorie="Monstre, Magie, Piège…",
+        section="Main Deck, Extra Deck…",
+        attribut="Attribut du monstre",
+        type_monstre="Dragon, Magicien, Guerrier…",
+        texte_effet="Texte à retrouver dans l'effet français ou anglais",
+        role="Rôle stratégique attribué par le staff",
+        atk_min="ATK minimale",
+        atk_max="ATK maximale",
+        niveau="Niveau exact",
+        rang="Rang exact",
+        lien="Valeur Lien exacte",
+        limite="Nombre maximal de résultats",
+    )
+    @app_commands.autocomplete(
+        categorie=category_autocomplete,
+        section=section_autocomplete,
+        attribut=attribute_autocomplete,
+        role=role_autocomplete,
+    )
+    async def filter_cards(
+        self,
+        interaction: discord.Interaction,
+        archetype: str | None = None,
+        categorie: str | None = None,
+        section: str | None = None,
+        attribut: str | None = None,
+        type_monstre: str | None = None,
+        texte_effet: str | None = None,
+        role: str | None = None,
+        atk_min: int | None = None,
+        atk_max: int | None = None,
+        niveau: int | None = None,
+        rang: int | None = None,
+        lien: int | None = None,
+        limite: app_commands.Range[int, 1, 25] = 10,
+    ) -> None:
+        await interaction.response.defer(thinking=True)
+        if atk_min is not None and atk_max is not None and atk_min > atk_max:
+            await interaction.followup.send(
+                embed=error_embed("Filtres invalides", "ATK minimale ne peut pas dépasser ATK maximale."),
+                ephemeral=True,
+            )
+            return
+        try:
+            cards = await self.bot.card_knowledge_repository.advanced_search(
+                archetype=archetype,
+                category=categorie,
+                deck_section=section,
+                attribute=attribut,
+                race=type_monstre,
+                effect_text=texte_effet,
+                role=role,
+                min_atk=atk_min,
+                max_atk=atk_max,
+                level=niveau,
+                rank=rang,
+                linkval=lien,
+                limit=int(limite),
+            )
+        except ValueError as error:
+            await interaction.followup.send(
+                embed=error_embed("Recherche impossible", str(error)),
+                ephemeral=True,
+            )
+            return
+        if not cards:
+            await interaction.followup.send(
+                embed=error_embed("Aucun résultat", "Aucune carte locale ne correspond à ces filtres."),
+                ephemeral=True,
+            )
+            return
+
+        roles_by_card = await self.bot.card_knowledge_repository.roles_for_cards(
+            [card.ygoprodeck_id for card in cards]
+        )
+        lines: list[str] = []
+        for card in cards:
+            roles = roles_by_card.get(card.ygoprodeck_id, [])
+            role_text = ", ".join(item.label for item in roles) or "aucun rôle"
+            details = card.classification or card.card_type or "non classée"
+            lines.append(
+                f"• **{card.display_name}** (`{card.ygoprodeck_id}`)\n"
+                f"  {details} • {role_text}"
+            )
+        embed = discord.Embed(
+            title="🔎 Recherche avancée",
+            description="\n".join(lines)[:4000],
+            colour=discord.Colour.purple(),
+        )
+        embed.set_footer(text=f"{len(cards)} résultat(s) affiché(s) depuis PostgreSQL")
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(
         name="archetype",

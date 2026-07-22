@@ -4,6 +4,7 @@ import discord
 
 from models.archetype import Archetype
 from models.card import Card
+from models.card_knowledge import CardAlias, CardRole
 from models.combo import Combo
 from utils.text import truncate
 
@@ -88,6 +89,34 @@ def card_embed(card: Card) -> discord.Embed:
     )
     return embed
 
+
+
+def add_card_knowledge(
+    embed: discord.Embed,
+    *,
+    aliases: list[CardAlias] | tuple[CardAlias, ...] = (),
+    roles: list[CardRole] | tuple[CardRole, ...] = (),
+) -> discord.Embed:
+    """Ajoute les alias et rôles stratégiques sans recréer la fiche de carte."""
+    if roles:
+        role_lines = []
+        for item in roles:
+            line = f"• **{item.label}**"
+            if item.notes:
+                line += f" — {truncate(item.notes, 180)}"
+            role_lines.append(line)
+        embed.add_field(
+            name="Rôles stratégiques",
+            value=truncate("\n".join(role_lines), 1024),
+            inline=False,
+        )
+    if aliases:
+        embed.add_field(
+            name="Alias et surnoms",
+            value=truncate(" • ".join(item.alias for item in aliases), 1024),
+            inline=False,
+        )
+    return embed
 
 def archetype_embed(archetype: Archetype) -> discord.Embed:
     embed = discord.Embed(

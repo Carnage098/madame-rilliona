@@ -12,6 +12,7 @@ from config import SETTINGS
 from database_manager import Database
 from repositories.archetype_repository import ArchetypeRepository
 from repositories.card_repository import CardRepository
+from repositories.card_knowledge_repository import CardKnowledgeRepository
 from repositories.card_submission_repository import CardSubmissionRepository
 from repositories.combo_repository import ComboRepository
 from services.card_api_service import CardApiService
@@ -45,6 +46,7 @@ class MadameRillionaBot(commands.Bot):
         self.http_session: aiohttp.ClientSession | None = None
 
         self.card_repository: CardRepository | None = None
+        self.card_knowledge_repository: CardKnowledgeRepository | None = None
         self.card_submission_repository: CardSubmissionRepository | None = None
         self.archetype_repository: ArchetypeRepository | None = None
         self.combo_repository: ComboRepository | None = None
@@ -74,13 +76,14 @@ class MadameRillionaBot(commands.Bot):
             timeout=aiohttp.ClientTimeout(total=180, connect=30),
             headers={
                 "User-Agent": (
-                    "Madame-Rilliona-Discord-Bot/3.1 "
+                    "Madame-Rilliona-Discord-Bot/3.2 "
                     "(Yu-Gi-Oh card, archetype and combo library)"
                 )
             },
         )
 
         self.card_repository = CardRepository(pool)
+        self.card_knowledge_repository = CardKnowledgeRepository(pool)
         self.card_submission_repository = CardSubmissionRepository(pool)
         self.archetype_repository = ArchetypeRepository(pool)
         self.combo_repository = ComboRepository(pool)
@@ -89,6 +92,7 @@ class MadameRillionaBot(commands.Bot):
         self.card_catalog_service = CardCatalogService(
             api=self.card_api_service,
             repository=self.card_repository,
+            knowledge=self.card_knowledge_repository,
         )
         self.card_image_service = CardImageService(
             SETTINGS.card_image_directory

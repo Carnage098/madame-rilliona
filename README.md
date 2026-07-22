@@ -1,90 +1,153 @@
-# Madame Rilliona V2.9 — import staff de cartes
+# Madame Rilliona V3.2 — encyclopédie stratégique
 
-Cette version ajoute un circuit contrôlé pour importer une carte depuis une URL ou une image PNG, puis vérifier immédiatement son enregistrement dans PostgreSQL.
+Cette version conserve la validation du staff, la détection des doublons et la découverte d'une carte toutes les 60 secondes. Elle ajoute une couche stratégique au catalogue PostgreSQL.
 
-## Commandes ajoutées
+## Nouveautés principales
 
-### `/base ajouter_carte`
+### Rôles stratégiques des cartes
 
-Options :
+Le staff peut attribuer plusieurs fonctions à une même carte :
 
-- `source` : **Site internet** ou **Image PNG** ;
-- `nom` : nom français, nom anglais ou identifiant YGOPRODeck ;
-- `url` : page de référence pour le mode site ;
-- `image` : pièce jointe `.png` pour le mode image.
+- Starter ;
+- Extender ;
+- Brick ;
+- Handtrap ;
+- Board Breaker ;
+- Interaction ;
+- Follow-up ;
+- Boss Monster ;
+- Carte de Side ;
+- Pièce de combo.
 
-Fonctionnement :
+Commandes :
 
-1. le bot vérifie que l'utilisateur appartient au staff ;
-2. il identifie la carte ;
-3. il récupère ses données françaises et anglaises depuis YGOPRODeck ;
-4. il enregistre l'effet, le classement, les statistiques, l'archétype et les images ;
-5. il relit la fiche depuis PostgreSQL ;
-6. il affiche un contrôle détaillé ;
-7. il journalise l'import dans la table `card_imports`.
-
-### `/base verifier_carte`
-
-Cette commande ne consulte pas le site externe. Elle vérifie directement la base locale :
-
-- présence dans PostgreSQL ;
-- nom ;
-- effet ou description ;
-- classement ;
-- image disponible.
-
-## Sources URL
-
-- Une URL YGOPRODeck peut être utilisée seule lorsqu'elle contient un nom ou un identifiant exploitable.
-- Pour un autre site, renseigne également l'option `nom`. Madame Rilliona conserve l'URL comme référence mais utilise YGOPRODeck pour obtenir une fiche structurée et cohérente.
-- Le bot ne télécharge pas les pages des sites tiers, ce qui évite les accès réseau non sûrs et les extracteurs fragiles.
-
-## Images PNG
-
-- Taille maximale par défaut : 10 Mo.
-- Le fichier est contrôlé grâce à sa signature PNG et à son en-tête de dimensions.
-- L'option `nom` est recommandée. Elle est requise si le fichier porte un nom générique comme `image.png`.
-- Le PNG du staff est enregistré dans `CARD_IMAGE_DIRECTORY` et devient prioritaire sur l'image YGOPRODeck.
-
-## Vérification du staff
-
-Un membre est accepté s'il possède au moins l'un des éléments suivants :
-
-- Administrateur ;
-- Gérer le serveur ;
-- Gérer les messages ;
-- un rôle configuré dans `STAFF_ROLE_IDS`.
-
-Exemple Railway :
-
-```env
-STAFF_ROLE_IDS=123456789012345678,987654321098765432
-MAX_STAFF_IMAGE_BYTES=10485760
+```text
+/carte definir_role
+/carte retirer_role
 ```
 
-`STAFF_ROLE_ID` avec un seul identifiant reste également accepté.
+Une note facultative peut expliquer pourquoi la carte possède ce rôle. Les rôles apparaissent ensuite dans `/carte rechercher`, `/carte filtrer` et les fiches d'archétypes.
 
-## Base de données
+### Alias et surnoms
+
+Le staff peut associer des abréviations, surnoms ou traductions supplémentaires à une carte :
+
+```text
+/carte ajouter_alias
+/carte retirer_alias
+```
+
+Exemples :
+
+```text
+BEWD
+Dragon Blanc
+Blue Eyes
+```
+
+Les alias sont normalisés pour accepter les différences de ponctuation, d'espaces et d'accents. Un alias ne peut pas être associé à deux cartes ni reprendre le nom officiel d'une autre carte.
+
+### Recherche avancée
+
+```text
+/carte filtrer
+```
+
+Filtres disponibles :
+
+- archétype ;
+- catégorie ;
+- emplacement dans le Deck ;
+- attribut ;
+- type de monstre ;
+- texte contenu dans l'effet ;
+- rôle stratégique ;
+- ATK minimale ou maximale ;
+- Niveau ;
+- Rang ;
+- valeur Lien ;
+- nombre maximal de résultats.
+
+La recherche utilise uniquement les données enregistrées dans PostgreSQL.
+
+### Fiches d'archétypes intelligentes
+
+```text
+/archetype consulter
+/archetype strategie
+```
+
+La fiche présente maintenant :
+
+- la répartition Monstres/Magies/Pièges ;
+- les cartes du Main Deck et de l'Extra Deck ;
+- le nombre de Starters, Extenders, Boss Monsters et autres rôles ;
+- les cartes correspondant à un rôle sélectionné.
+
+### Diagnostic de la base
+
+```text
+/base diagnostic
+```
+
+Cette commande réservée au staff contrôle :
+
+- les cartes sans effet français ;
+- les cartes sans image distante ;
+- les cartes sans classement ;
+- les cartes sans archétype ;
+- les cartes sans rôle stratégique ;
+- les alias et rôles enregistrés ;
+- les propositions en attente ;
+- les noms dupliqués potentiels ;
+- les archétypes vides ;
+- les combos sans étape ;
+- la dernière découverte aléatoire.
+
+## Nouvelles tables PostgreSQL
 
 La migration automatique crée :
 
 ```text
-card_imports
+card_aliases
+card_roles
 ```
 
-Chaque tentative conserve :
+Aucune carte, aucun archétype, aucun combo et aucune proposition existante ne sont supprimés.
 
-- la carte concernée ;
-- l'identifiant Discord de l'auteur ;
-- le type de source ;
-- l'URL ou le nom du fichier ;
-- le résultat de l'import ;
-- le résultat de la vérification ;
-- la date.
+## Découverte aléatoire
 
-## Railway
+Configuration recommandée :
 
-Place les fichiers directement à la racine du dépôt :
+```env
+RANDOM_DISCOVERY_ENABLED=true
+RANDOM_DISCOVERY_INTERVAL_SECONDS=60
+RANDOM_DISCOVERY_MAX_ATTEMPTS=8
+RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS=30
+```
+
+Chaque minute, Madame Rilliona vérifie l'identifiant officiel avant insertion. Une carte déjà présente est ignorée et un autre tirage est tenté.
+
+## Variables Railway
+
+```env
+DISCORD_TOKEN=
+DATABASE_URL=
+GUILD_ID=
+CARD_IMAGE_DIRECTORY=/app/data/card_images
+LOG_LEVEL=INFO
+RANDOM_DISCOVERY_ENABLED=true
+RANDOM_DISCOVERY_INTERVAL_SECONDS=60
+RANDOM_DISCOVERY_MAX_ATTEMPTS=8
+RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS=30
+STAFF_ROLE_IDS=
+CARD_REVIEW_CHANNEL_ID=
+MAX_STAFF_IMAGE_BYTES=10485760
+```
+
+## Déploiement Railway
+
+Place tous les fichiers directement à la racine du dépôt :
 
 ```text
 bot.py
@@ -97,28 +160,14 @@ models/
 repositories/
 services/
 utils/
+views/
 ```
 
-Commande de démarrage :
+Configuration :
 
 ```text
-python bot.py
+Root Directory : vide
+Start Command : python bot.py
 ```
 
-Pour conserver les PNG du staff après les redéploiements, monte un volume Railway sur le chemin défini par `CARD_IMAGE_DIRECTORY`, par défaut `/app/data/card_images`.
-
-
-## Découverte rapide V3.1
-
-La tâche autonome effectue une tentative toutes les 60 secondes. Avant toute insertion, le bot vérifie l’identifiant dans PostgreSQL. Une carte déjà connue est ignorée et un autre tirage est tenté, jusqu’à la limite configurée.
-
-Variables Railway :
-
-```env
-RANDOM_DISCOVERY_ENABLED=true
-RANDOM_DISCOVERY_INTERVAL_SECONDS=60
-RANDOM_DISCOVERY_MAX_ATTEMPTS=8
-RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS=30
-```
-
-L’ancienne variable `RANDOM_DISCOVERY_INTERVAL_MINUTES` n’est plus utilisée.
+Pour conserver les images PNG après un redéploiement, monte un volume sur `/app/data/card_images` ou sur le chemin défini dans `CARD_IMAGE_DIRECTORY`.

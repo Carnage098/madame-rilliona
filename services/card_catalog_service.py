@@ -9,6 +9,7 @@ from typing import Any
 
 from models.card import Card
 from repositories.card_repository import CardRepository
+from repositories.card_knowledge_repository import CardKnowledgeRepository
 from services.card_api_service import CardApiService
 from utils.text import normalize_search_text
 
@@ -25,12 +26,17 @@ class CardSuggestion:
     card_id: int
     name_fr: str | None
     name_en: str
+    matched_alias: str | None = None
 
     @property
     def display_name(self) -> str:
         if self.name_fr and self.name_fr.casefold() != self.name_en.casefold():
-            return f"{self.name_fr} — {self.name_en}"
-        return self.name_fr or self.name_en
+            base = f"{self.name_fr} — {self.name_en}"
+        else:
+            base = self.name_fr or self.name_en
+        if self.matched_alias:
+            return f"{base} (alias : {self.matched_alias})"
+        return base
 
     def matches(self, query: str) -> bool:
         normalized = normalize_search_text(query)
@@ -38,9 +44,15 @@ class CardSuggestion:
 
 
 class CardCatalogService:
-    def __init__(self, api: CardApiService, repository: CardRepository) -> None:
+    def __init__(
+        self,
+        api: CardApiService,
+        repository: CardRepository,
+        knowledge: CardKnowledgeRepository | None = None,
+    ) -> None:
         self.api = api
         self.repository = repository
+        self.knowledge = knowledge
         self._archetype_names_cache: tuple[str, ...] = ()
         self._archetype_sync_lock = asyncio.Lock()
         self._autocomplete_cache: dict[str, tuple[float, tuple[CardSuggestion, ...]]] = {}
@@ -252,6 +264,11 @@ class CardCatalogService:
         if not normalized:
             return None
 
+        if self.knowledge is not None and not normalized.isdigit():
+            alias_card = await self.knowledge.find_card_by_alias(normalized)
+            if alias_card is not None:
+                return alias_card
+
         if normalized.isdigit():
             card_id = int(normalized)
             english, french = await asyncio.gather(
@@ -298,6 +315,11 @@ class CardCatalogService:
         normalized = query.strip()
         if not normalized:
             return None
+
+        if self.knowledge is not None and not normalized.isdigit():
+            alias_card = await self.knowledge.find_card_by_alias(normalized)
+            if alias_card is not None:
+                return alias_card
 
         if normalized.isdigit():
             card_id = int(normalized)
@@ -346,11 +368,16 @@ class CardCatalogService:
 
 
     @staticmethod
-    def _suggestion_from_local(card: Card) -> CardSuggestion:
+    def _suggestion_from_local(
+        card: Card,
+        *,
+        matched_alias: str | None = None,
+    ) -> CardSuggestion:
         return CardSuggestion(
             card_id=card.ygoprodeck_id,
             name_fr=card.name_fr,
             name_en=card.name_en,
+            matched_alias=matched_alias,
         )
 
     @staticmethod
@@ -419,6 +446,16 @@ class CardCatalogService:
         requested = query.strip()
         local_cards = await self.repository.autocomplete(requested, limit=limit)
         local_suggestions = [self._suggestion_from_local(card) for card in local_cards]
+        if self.knowledge is not None and requested.strip():
+            alias_matches = await self.knowledge.autocomplete_aliases(
+                requested,
+                limit=limit,
+            )
+            alias_suggestions = [
+                self._suggestion_from_local(card, matched_alias=alias)
+                for card, alias in alias_matches
+            ]
+            local_suggestions = [*alias_suggestions, *local_suggestions]
 
         # Avant 3 caractères, une requête externe serait trop large et trop fréquente.
         if len(normalize_search_text(requested)) < 3:

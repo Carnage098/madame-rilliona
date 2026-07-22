@@ -129,6 +129,39 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_card_submissions_active_candidate
     ON card_submissions (candidate_card_id)
     WHERE status IN ('pending', 'processing');
 
+CREATE TABLE IF NOT EXISTS card_aliases (
+    id BIGSERIAL PRIMARY KEY,
+    card_id BIGINT NOT NULL REFERENCES cards(ygoprodeck_id) ON DELETE CASCADE,
+    alias TEXT NOT NULL,
+    normalized_alias TEXT NOT NULL,
+    language TEXT,
+    source TEXT NOT NULL DEFAULT 'staff',
+    created_by BIGINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_card_aliases_normalized
+    ON card_aliases (normalized_alias);
+CREATE INDEX IF NOT EXISTS idx_card_aliases_card_id
+    ON card_aliases (card_id);
+CREATE INDEX IF NOT EXISTS idx_card_aliases_lookup
+    ON card_aliases (normalized_alias);
+
+CREATE TABLE IF NOT EXISTS card_roles (
+    card_id BIGINT NOT NULL REFERENCES cards(ygoprodeck_id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    notes TEXT,
+    assigned_by BIGINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (card_id, role)
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_roles_role
+    ON card_roles (role);
+CREATE INDEX IF NOT EXISTS idx_card_roles_card_id
+    ON card_roles (card_id);
+
 -- Une interruption pendant une validation ne doit pas bloquer définitivement la demande.
 UPDATE card_submissions
 SET status = 'pending',
