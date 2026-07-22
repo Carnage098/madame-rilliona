@@ -17,6 +17,7 @@ from repositories.combo_repository import ComboRepository
 from services.card_api_service import CardApiService
 from services.card_catalog_service import CardCatalogService
 from services.card_image_service import CardImageService
+from services.card_import_service import CardImportService
 from services.combo_service import ComboService
 
 
@@ -48,11 +49,13 @@ class MadameRillionaBot(commands.Bot):
         self.card_api_service: CardApiService | None = None
         self.card_catalog_service: CardCatalogService | None = None
         self.card_image_service: CardImageService | None = None
+        self.card_import_service: CardImportService | None = None
         self.combo_service: ComboService | None = None
 
         self.card_api: CardApiService | None = None
         self.card_catalog: CardCatalogService | None = None
         self.card_images: CardImageService | None = None
+        self.card_imports: CardImportService | None = None
 
         self._random_discovery_task: asyncio.Task[None] | None = None
 
@@ -66,7 +69,7 @@ class MadameRillionaBot(commands.Bot):
             timeout=aiohttp.ClientTimeout(total=180, connect=30),
             headers={
                 "User-Agent": (
-                    "Madame-Rilliona-Discord-Bot/2.7 "
+                    "Madame-Rilliona-Discord-Bot/2.9 "
                     "(Yu-Gi-Oh card, archetype and combo library)"
                 )
             },
@@ -84,6 +87,12 @@ class MadameRillionaBot(commands.Bot):
         self.card_image_service = CardImageService(
             SETTINGS.card_image_directory
         )
+        self.card_import_service = CardImportService(
+            catalog=self.card_catalog_service,
+            repository=self.card_repository,
+            images=self.card_image_service,
+            max_image_bytes=SETTINGS.max_staff_image_bytes,
+        )
         self.combo_service = ComboService(
             archetypes=self.archetype_repository,
             combos=self.combo_repository,
@@ -92,6 +101,7 @@ class MadameRillionaBot(commands.Bot):
         self.card_api = self.card_api_service
         self.card_catalog = self.card_catalog_service
         self.card_images = self.card_image_service
+        self.card_imports = self.card_import_service
 
         for extension in COGS:
             await self.load_extension(extension)

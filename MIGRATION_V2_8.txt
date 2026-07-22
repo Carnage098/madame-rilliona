@@ -1,0 +1,19 @@
+MADAME RILLIONA V2.8 — CORRECTION DE L'AUTOCOMPLÉTION
+
+1. Remplace entièrement les fichiers du dépôt par le contenu de cette archive.
+2. Conserve tes variables Railway existantes.
+3. Root Directory : vide.
+4. Start Command : python bot.py.
+5. Redéploie le dernier commit.
+
+CORRECTIONS
+- L'autocomplétion /carte rechercher consulte PostgreSQL puis YGOPRODeck.
+- Les noms anglais et français peuvent apparaître dans les suggestions.
+- Les recherches avec espaces, tirets et apostrophes sont mieux reconnues.
+- Une sélection issue de l'API transmet l'identifiant de la carte.
+- La commande récupère ensuite la fiche complète et l'enregistre dans PostgreSQL.
+- Cache de 120 secondes et délai maximal de 2,4 secondes pour limiter les appels API.
+
+TEST
+/carte rechercher carte: Blue eyes
+Puis sélectionner « Blue-Eyes White Dragon » dans la liste.

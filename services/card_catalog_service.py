@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import Counter
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -19,12 +20,32 @@ class ArchetypeSyncResult:
     imported_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class CardSuggestion:
+    card_id: int
+    name_fr: str | None
+    name_en: str
+
+    @property
+    def display_name(self) -> str:
+        if self.name_fr and self.name_fr.casefold() != self.name_en.casefold():
+            return f"{self.name_fr} — {self.name_en}"
+        return self.name_fr or self.name_en
+
+    def matches(self, query: str) -> bool:
+        normalized = normalize_search_text(query)
+        return normalized in normalize_search_text(self.name_fr) or normalized in normalize_search_text(self.name_en)
+
+
 class CardCatalogService:
     def __init__(self, api: CardApiService, repository: CardRepository) -> None:
         self.api = api
         self.repository = repository
         self._archetype_names_cache: tuple[str, ...] = ()
         self._archetype_sync_lock = asyncio.Lock()
+        self._autocomplete_cache: dict[str, tuple[float, tuple[CardSuggestion, ...]]] = {}
+        self._autocomplete_lock = asyncio.Lock()
+        self._autocomplete_ttl_seconds = 120.0
 
     @staticmethod
     def _integer(value: Any) -> int | None:
@@ -226,9 +247,20 @@ class CardCatalogService:
             return None
 
         if normalized.isdigit():
-            local_by_id = await self.repository.get_by_id(int(normalized))
+            card_id = int(normalized)
+            local_by_id = await self.repository.get_by_id(card_id)
             if local_by_id is not None:
                 return local_by_id
+
+            english, french = await asyncio.gather(
+                self.api.fetch_by_id(card_id),
+                self.api.fetch_by_id(card_id, language="fr"),
+            )
+            if english is None:
+                return None
+            card = self._build_card(english, french, import_source="autocomplete_selection")
+            await self.repository.upsert(card)
+            return card
 
         local = await self.repository.search(normalized, limit=1)
         if local:
@@ -258,6 +290,127 @@ class CardCatalogService:
         card = self._build_card(english, french, import_source="search")
         await self.repository.upsert(card)
         return card
+
+
+    @staticmethod
+    def _suggestion_from_local(card: Card) -> CardSuggestion:
+        return CardSuggestion(
+            card_id=card.ygoprodeck_id,
+            name_fr=card.name_fr,
+            name_en=card.name_en,
+        )
+
+    @staticmethod
+    def _suggestions_from_api(
+        english_cards: list[dict[str, Any]],
+        french_cards: list[dict[str, Any]],
+    ) -> list[CardSuggestion]:
+        english_by_id = {
+            int(card["id"]): card
+            for card in english_cards
+            if card.get("id") is not None
+        }
+        french_by_id = {
+            int(card["id"]): card
+            for card in french_cards
+            if card.get("id") is not None
+        }
+        suggestions: list[CardSuggestion] = []
+        for card_id in dict.fromkeys((*english_by_id.keys(), *french_by_id.keys())):
+            english = english_by_id.get(card_id)
+            french = french_by_id.get(card_id)
+            name_en = str((english or french or {}).get("name") or "Carte inconnue")
+            name_fr = str(french.get("name")) if french and french.get("name") else None
+            suggestions.append(
+                CardSuggestion(
+                    card_id=card_id,
+                    name_fr=name_fr,
+                    name_en=name_en,
+                )
+            )
+        return suggestions
+
+    def _cached_suggestions(self, normalized_query: str) -> list[CardSuggestion] | None:
+        now = time.monotonic()
+        expired = [key for key, (expires_at, _items) in self._autocomplete_cache.items() if expires_at <= now]
+        for key in expired:
+            self._autocomplete_cache.pop(key, None)
+
+        exact = self._autocomplete_cache.get(normalized_query)
+        if exact is not None:
+            return list(exact[1])
+
+        prefixes = [
+            key
+            for key in self._autocomplete_cache
+            if normalized_query.startswith(key)
+        ]
+        if not prefixes:
+            return None
+
+        longest = max(prefixes, key=len)
+        filtered = [
+            item
+            for item in self._autocomplete_cache[longest][1]
+            if item.matches(normalized_query)
+        ]
+        return filtered or None
+
+    async def autocomplete(
+        self,
+        query: str,
+        *,
+        limit: int = 25,
+    ) -> list[CardSuggestion]:
+        """Autocomplete locale puis distante, avec cache pour protéger l'API."""
+        requested = query.strip()
+        local_cards = await self.repository.autocomplete(requested, limit=limit)
+        local_suggestions = [self._suggestion_from_local(card) for card in local_cards]
+
+        # Avant 3 caractères, une requête externe serait trop large et trop fréquente.
+        if len(normalize_search_text(requested)) < 3:
+            return local_suggestions[:limit]
+
+        normalized_query = normalize_search_text(requested)
+        cached = self._cached_suggestions(normalized_query)
+        external_suggestions: list[CardSuggestion] = cached or []
+
+        if cached is None:
+            async with self._autocomplete_lock:
+                cached = self._cached_suggestions(normalized_query)
+                if cached is not None:
+                    external_suggestions = cached
+                else:
+                    try:
+                        english_cards, french_cards = await asyncio.wait_for(
+                            asyncio.gather(
+                                self.api.search(requested),
+                                self.api.search(requested, language="fr"),
+                            ),
+                            timeout=2.4,
+                        )
+                    except (TimeoutError, asyncio.TimeoutError, OSError, RuntimeError):
+                        english_cards, french_cards = [], []
+
+                    external_suggestions = self._suggestions_from_api(
+                        english_cards,
+                        french_cards,
+                    )
+                    self._autocomplete_cache[normalized_query] = (
+                        time.monotonic() + self._autocomplete_ttl_seconds,
+                        tuple(external_suggestions),
+                    )
+
+        merged: list[CardSuggestion] = []
+        seen_ids: set[int] = set()
+        for suggestion in (*local_suggestions, *external_suggestions):
+            if suggestion.card_id in seen_ids:
+                continue
+            seen_ids.add(suggestion.card_id)
+            merged.append(suggestion)
+            if len(merged) >= limit:
+                break
+        return merged
 
     async def _archetype_names(self, *, refresh: bool = False) -> tuple[str, ...]:
         if refresh or not self._archetype_names_cache:

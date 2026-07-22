@@ -1,35 +1,15 @@
-INSTALLATION PROPRE — MADAME RILLIONA V2.7
+MADAME RILLIONA V2.9 — INSTALLATION PROPRE
 
-À la racine du dépôt GitHub :
-- bot.py
-- config.py
-- database_manager.py
-- requirements.txt
-- railway.toml
-- cogs/
-- models/
-- repositories/
-- services/
-- utils/
+1. Remplacer entièrement l'ancienne version par le contenu de cette archive.
+2. Conserver à la racine : bot.py, config.py, database_manager.py et les dossiers cogs, models, repositories, services, utils.
+3. Railway : Start Command = python bot.py ; Root Directory = vide.
+4. Variables minimales : DISCORD_TOKEN, DATABASE_URL, GUILD_ID.
+5. Variables staff conseillées :
+   STAFF_ROLE_IDS=ID_ROLE_STAFF,ID_AUTRE_ROLE
+   MAX_STAFF_IMAGE_BYTES=10485760
+6. Conserver CARD_IMAGE_DIRECTORY=/app/data/card_images.
+7. Monter un volume persistant sur /app/data/card_images pour conserver les PNG.
+8. Redéployer le dernier commit.
+9. Tester /base ajouter_carte puis /base verifier_carte.
 
-Supprimer les anciens éléments incompatibles :
-- database.py
-- database/
-- start.py
-- flat_import_compat.py
-
-Railway :
-- Root Directory : vide
-- Start Command : python bot.py
-
-Variables obligatoires :
-- DISCORD_TOKEN
-- DATABASE_URL
-
-Variables recommandées :
-- GUILD_ID
-- CARD_IMAGE_DIRECTORY=/app/data/card_images
-- LOG_LEVEL=INFO
-- RANDOM_DISCOVERY_ENABLED=true
-- RANDOM_DISCOVERY_INTERVAL_MINUTES=360
-- RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS=300
+Le schéma PostgreSQL est migré automatiquement au démarrage.

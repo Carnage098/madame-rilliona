@@ -25,13 +25,18 @@ class CardCog(
         interaction: discord.Interaction,
         current: str,
     ):
-        cards = await self.bot.card_repository.autocomplete(current)
+        try:
+            suggestions = await self.bot.card_catalog_service.autocomplete(current)
+        except Exception:
+            LOGGER.exception("Échec de l'autocomplétion pour %r", current)
+            suggestions = []
+
         return [
             app_commands.Choice(
-                name=card.display_name[:100],
-                value=str(card.ygoprodeck_id),
+                name=suggestion.display_name[:100],
+                value=str(suggestion.card_id),
             )
-            for card in cards[:25]
+            for suggestion in suggestions[:25]
         ]
 
     @app_commands.command(name="rechercher", description="Rechercher une carte Yu-Gi-Oh!")

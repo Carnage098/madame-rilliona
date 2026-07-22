@@ -13,7 +13,7 @@ class CardApiService:
 
     def __init__(self, timeout_seconds: int = 90) -> None:
         self.timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-        self.headers = {"User-Agent": "Madame-Rilliona/2.7"}
+        self.headers = {"User-Agent": "Madame-Rilliona/2.9"}
 
     async def _request_json(
         self,
@@ -79,26 +79,49 @@ class CardApiService:
 
         return english_result, french_cards
 
+    @staticmethod
+    def _search_variants(query: str) -> tuple[str, ...]:
+        """Construit quelques variantes sûres pour les noms avec tirets/apostrophes."""
+        cleaned = " ".join(query.strip().split())
+        if not cleaned:
+            return ()
+
+        variants: list[str] = [cleaned]
+        if "-" in cleaned:
+            variants.append(cleaned.replace("-", " "))
+        elif " " in cleaned:
+            variants.append(cleaned.replace(" ", "-"))
+
+        if "’" in cleaned:
+            variants.append(cleaned.replace("’", "'"))
+        elif "'" in cleaned:
+            variants.append(cleaned.replace("'", "’"))
+
+        return tuple(dict.fromkeys(value for value in variants if value))
+
     async def search(
         self,
         query: str,
         *,
         language: str | None = None,
     ) -> list[dict[str, Any]]:
-        normalized = query.strip()
-        if not normalized:
+        variants = self._search_variants(query)
+        if not variants:
             return []
 
-        params = {"fname": normalized}
-        if language:
-            params["language"] = language
-
         async with aiohttp.ClientSession(timeout=self.timeout, headers=self.headers) as session:
-            return await self._fetch_cards(
-                session,
-                params,
-                empty_on_not_found=True,
-            )
+            for variant in variants:
+                params = {"fname": variant}
+                if language:
+                    params["language"] = language
+                cards = await self._fetch_cards(
+                    session,
+                    params,
+                    empty_on_not_found=True,
+                )
+                if cards:
+                    return cards
+        return []
 
     async def fetch_by_id(
         self,

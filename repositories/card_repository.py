@@ -249,3 +249,36 @@ class CardRepository:
             """
         )
         return {str(row["category"]): int(row["total"]) for row in rows}
+
+    async def record_import(
+        self,
+        *,
+        card_id: int | None,
+        submitted_by: int,
+        source_type: str,
+        source_reference: str | None,
+        original_filename: str | None,
+        status: str,
+        verification_status: str,
+        details: str | None = None,
+    ) -> int:
+        return int(
+            await self.pool.fetchval(
+                """
+                INSERT INTO card_imports (
+                    card_id, submitted_by, source_type, source_reference,
+                    original_filename, status, verification_status, details
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id
+                """,
+                card_id,
+                submitted_by,
+                source_type,
+                source_reference,
+                original_filename,
+                status,
+                verification_status,
+                details,
+            )
+        )

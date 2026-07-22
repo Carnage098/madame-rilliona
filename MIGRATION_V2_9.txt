@@ -1,0 +1,35 @@
+MADAME RILLIONA V2.9 — IMPORT STAFF DE CARTES
+
+NOUVELLES COMMANDES
+- /base ajouter_carte
+- /base verifier_carte
+
+SOURCES ACCEPTÉES
+1. Site internet :
+   - URL YGOPRODeck seule, si la carte est identifiable dans l’URL ;
+   - autre site avec l’option nom renseignée. Le bot utilise alors le nom pour
+     récupérer les données officielles dans YGOPRODeck et conserve l’URL comme référence.
+
+2. Image PNG :
+   - fichier .png de 10 Mo maximum par défaut ;
+   - l’option nom est recommandée et obligatoire si le nom du fichier est générique.
+
+VÉRIFICATION STAFF
+Un utilisateur est considéré comme membre du staff s’il possède :
+- Administrateur ;
+- Gérer le serveur ;
+- Gérer les messages ;
+- ou un rôle présent dans STAFF_ROLE_IDS.
+
+Exemple Railway :
+STAFF_ROLE_IDS=123456789012345678,987654321098765432
+MAX_STAFF_IMAGE_BYTES=10485760
+
+BASE DE DONNÉES
+La migration crée automatiquement la table card_imports. Chaque tentative est journalisée
+avec l’auteur, la source, le résultat et l’état de la vérification PostgreSQL.
+
+IMAGES
+Les PNG du staff sont enregistrés dans CARD_IMAGE_DIRECTORY et prioritaires sur les images
+distantes. Pour les conserver après un redéploiement Railway, ce dossier doit être placé
+sur un volume persistant.

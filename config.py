@@ -27,6 +27,27 @@ def _env_int(name: str, default: int, *, minimum: int) -> int:
     return max(minimum, value)
 
 
+def _env_int_tuple(*names: str) -> tuple[int, ...]:
+    values: list[int] = []
+    for name in names:
+        raw = os.getenv(name, "").strip()
+        if not raw:
+            continue
+        for item in raw.replace(";", ",").split(","):
+            cleaned = item.strip()
+            if not cleaned:
+                continue
+            try:
+                value = int(cleaned)
+            except ValueError as error:
+                raise RuntimeError(
+                    f"{name} doit contenir uniquement des identifiants numériques séparés par des virgules."
+                ) from error
+            if value not in values:
+                values.append(value)
+    return tuple(values)
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     discord_token: str
@@ -37,6 +58,8 @@ class Settings:
     random_discovery_enabled: bool
     random_discovery_interval_minutes: int
     random_discovery_initial_delay_seconds: int
+    staff_role_ids: tuple[int, ...]
+    max_staff_image_bytes: int
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -76,6 +99,12 @@ class Settings:
                 "RANDOM_DISCOVERY_INITIAL_DELAY_SECONDS",
                 300,
                 minimum=30,
+            ),
+            staff_role_ids=_env_int_tuple("STAFF_ROLE_IDS", "STAFF_ROLE_ID"),
+            max_staff_image_bytes=_env_int(
+                "MAX_STAFF_IMAGE_BYTES",
+                10 * 1024 * 1024,
+                minimum=1024,
             ),
         )
 

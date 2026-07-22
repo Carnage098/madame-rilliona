@@ -61,6 +61,28 @@ CREATE INDEX IF NOT EXISTS idx_cards_category_lower
 CREATE INDEX IF NOT EXISTS idx_cards_deck_section_lower
     ON cards (LOWER(COALESCE(deck_section, '')));
 
+
+
+CREATE TABLE IF NOT EXISTS card_imports (
+    id BIGSERIAL PRIMARY KEY,
+    card_id BIGINT REFERENCES cards(ygoprodeck_id) ON DELETE SET NULL,
+    submitted_by BIGINT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_reference TEXT,
+    original_filename TEXT,
+    status TEXT NOT NULL,
+    verification_status TEXT NOT NULL,
+    details TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_imports_card_id
+    ON card_imports (card_id);
+CREATE INDEX IF NOT EXISTS idx_card_imports_submitted_by
+    ON card_imports (submitted_by);
+CREATE INDEX IF NOT EXISTS idx_card_imports_created_at
+    ON card_imports (created_at DESC);
+
 CREATE TABLE IF NOT EXISTS archetypes (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
